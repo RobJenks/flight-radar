@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use std::sync::mpsc::{Sender, Receiver};
 use crate::aircraft::{Aircraft, AircraftData};
 use std::thread;
 use std::time::Duration;
@@ -9,22 +9,29 @@ use std::error::Error;
 const SOURCE: &str = "https://opensky-network.org/api/states/all";
 
 
-pub fn simulate(out: Sender<Vec<Aircraft>>) {
-
+pub fn simulate(trigger: Receiver<()>, out: Sender<AircraftData>) {
     loop {
-        println!("Simulating...");
+        trigger.recv().and_then(|_| {
+            println!("Simulating...");
 
-        match httpclient::get(SOURCE) {
-            Err(e) => println!("Retrieval error; {}", e.description()),
-            Ok(data) =>
-                match out.send(parse_data(data).data) {
-                    Err(e) => println!("Send error: {}", e.description()),
-                    _ => ()
+            match httpclient::get(SOURCE) {
+                Err(e) => println!("Retrieval error; {}", e.description()),
+                Ok(data) =>
+                    match out.send(parse_data(data)) {
+                        Err(e) => println!("Send error: {}", e.description()),
+                        _ => ()
+                    }
             }
-        }
-
-        thread::sleep(Duration::from_secs(10));
+            Ok(())
+        });
     }
+}
+
+pub fn periodic_trigger(trigger: Sender<()>, interval: u64) {
+    loop {
+        thread::sleep(Duration::from_secs(interval));
+        trigger.send(());
+    };
 }
 
 fn parse_data(data: String) -> AircraftData {

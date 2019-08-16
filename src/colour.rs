@@ -1,1 +1,6 @@
-pub const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+use image::Rgba;
+
+pub const BLACK: Rgba<u8> = Rgba([0, 0, 0, 255]);
+pub const RED: Rgba<u8> = Rgba([255, 0, 0, 255]);
+pub const GREEN: Rgba<u8> = Rgba([0, 255, 0, 255]);
+pub const BLUE: Rgba<u8> = Rgba([0, 0, 255, 255]);

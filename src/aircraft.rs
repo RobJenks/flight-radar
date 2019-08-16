@@ -23,10 +23,16 @@ pub struct Aircraft {
     pub position_source: i32                // 0=ADS-B, 1=ASTERIX, 2=MLAT
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct AircraftData {
     pub time: isize,                        // Time of data receipt
 
     #[serde(rename = "states")]
     pub data: Vec<Aircraft>                 // All state vectors
+}
+
+impl AircraftData {
+    pub fn empty() -> Self {
+        Self { time: 0, data: vec![] }
+    }
 }

@@ -1,16 +1,18 @@
 use std::thread;
-use std::sync::mpsc::Receiver;
-use crate::aircraft::Aircraft;
+use std::sync::mpsc::{Sender, Receiver};
+use crate::aircraft::{Aircraft, AircraftData};
 use std::time::Duration;
+use ::image;
 use piston_window::*;
 use piston_window::math::Vec2d;
+use image::Rgba;
 
 #[path = "./colour.rs"] mod colour;
 #[path = "./coords.rs"] mod coords;
 
-const AIRCRAFT_RENDER_SIZE: f64 = 2.0;
+pub type BackBuffer = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
 
-pub fn render<E>(window: &mut PistonWindow, e: &E, r: &RenderArgs, data: &Vec<Aircraft>)
+pub fn render<E>(window: &mut PistonWindow, e: &E, r: &RenderArgs, data: &AircraftData)
     where E: GenericEvent
 {
     window.draw_2d(e, |context, mut g, device| {
@@ -19,19 +21,23 @@ pub fn render<E>(window: &mut PistonWindow, e: &E, r: &RenderArgs, data: &Vec<Ai
 
         let rect = [20.0, 20.0, 2.0, 2.0];
 
-        ellipse(colour::RED, rect, context.transform, g);
-        data.iter().for_each(|x| render_aircraft(x, &context, &mut g, &window_size));
+        //data.data.iter().for_each(|x| render_aircraft(x, &context, &mut g, &window_size));
     });
 }
 
-fn render_aircraft(aircraft: &Aircraft, context: &Context, g: &mut G2d, view_size: &Vec2d)
-{
+pub fn render_aircraft(aircraft: &Aircraft, buffer: &mut BackBuffer, view_size: &[u32; 2]) -> bool {
     if let (Some(lon), Some(lat)) = (aircraft.longitude, aircraft.latitude) {
-        let (x_norm, y_norm) = coords::origin_based_normalised_screen_coords(lon, lat);
-        assert!(x_norm >= 0.0 && y_norm >= 0.0 && x_norm < 1.0 && y_norm < 1.0);
-        let (x, y) = (x_norm * view_size[0], y_norm * view_size[1]);
+        let (x_norm, y_norm) = coords::normalised_equirectangular_coords(lon, lat);
+        let (x, y) = ((x_norm * view_size[0] as f64) as u32, (y_norm * view_size[1] as f64) as u32);
 
-        let rect = [x, y, AIRCRAFT_RENDER_SIZE, AIRCRAFT_RENDER_SIZE];
-        ellipse(colour::RED, rect, context.transform, g);
+        if x <= view_size[0] && y <= view_size[1] {
+            buffer.put_pixel(x, y, colour::RED);
+            return true
+        }
     }
+    false
+}
+
+pub fn clear_backbuffer(canvas: &mut BackBuffer) {
+    canvas.pixels_mut().for_each(|mut p| p.0 = [0u8; 4]);
 }
