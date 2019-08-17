@@ -26,5 +26,5 @@ pub fn render_aircraft(aircraft: &Aircraft, buffer: &mut BackBuffer, view_size: 
 }
 
 pub fn clear_backbuffer(canvas: &mut BackBuffer) {
-    canvas.pixels_mut().for_each(|mut p| p.0 = [0u8; 4]);
+    canvas.pixels_mut().for_each(|mut p| p.0 = [0, 0, 0, 255]);
 }

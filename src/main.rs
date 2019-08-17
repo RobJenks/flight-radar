@@ -1,14 +1,16 @@
 #![feature(async_await)]
 
 extern crate piston_window;
+extern crate chrono;
 
 use piston_window::*;
+use chrono::{DateTime, Utc};
 use std::thread;
 use std::sync::mpsc;
 use ::image;
-use crate::aircraft::{Aircraft, AircraftData};
-use image::Rgba;
+use image::{Rgba, ImageFormat};
 use std::time::Duration;
+use crate::aircraft::{Aircraft, AircraftData};
 
 mod aircraft;
 mod sources;
@@ -60,6 +62,12 @@ fn main() {
 
                     tx_simulate.send(state_vector_source.clone());
                 },
+                Input::Button(args) => {
+                    match args.button {
+                        Button::Keyboard(Key::F12) if args.state == ButtonState::Release => screenshot(&canvas),
+                        _ => ()
+                    }
+                }
                 _ => ()
             }
             Event::Loop(event) => match event {
@@ -97,4 +105,11 @@ fn get_creds() -> Option<String> {
         Ok(x) => Some(x),
         _ => None
     }
+}
+
+fn screenshot(buffer: &rendering::BackBuffer) {
+    let filename = format!("image-{}.png", Utc::now().format("%Y%m%d-%H%M%S"));
+    buffer.save_with_format(filename.as_str(), ImageFormat::PNG);
+
+    println!("Screenshot saved to \"{}\"", filename);
 }
