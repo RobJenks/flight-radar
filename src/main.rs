@@ -28,8 +28,10 @@ fn main() {
 
     window.set_lazy(false);
 
+    // Source provider
     let cred = get_creds();
-    println!("Connected to {} sources", if cred.is_some() { "authenticated" } else { "unauthenticated" });
+    let source_provider = sources::SourceProvider::new(cred, false);
+    println!("Connected to {} sources", if source_provider.is_authenticated() { "authenticated" } else { "unauthenticated" });
 
     let mut data: AircraftData = AircraftData::empty();
 
@@ -41,10 +43,9 @@ fn main() {
     let (tx_data, rx_data) = mpsc::channel();
 
     // Simulation thread and periodic trigger
-    let state_vector_source = sources::source_state_vectors(cred);
-    let periodic_simulation_source = state_vector_source.clone();
+    let periodic_source = source_provider.source_state_vectors();
     thread::spawn(move || simulation::simulate(rx_simulate, tx_data));
-    thread::spawn(move || simulation::periodic_trigger(tx_periodic_simulation, periodic_simulation_source, 2));
+    thread::spawn(move || simulation::periodic_trigger(tx_periodic_simulation, periodic_source, 2));
 
     let mut draw_size: [u32; 2] = [window.draw_size().width as u32, window.draw_size().height as u32];
     let mut canvas: rendering::BackBuffer = image::ImageBuffer::new(draw_size[0], draw_size[1]);
@@ -60,7 +61,8 @@ fn main() {
                     texture_context = TextureContext { factory: window.factory.clone(), encoder: window.factory.create_command_buffer().into() };
                     texture = Texture::from_image(&mut texture_context,&canvas, &TextureSettings::new()).unwrap();
 
-                    tx_simulate.send(state_vector_source.clone());
+                    let source = source_provider.source_state_vectors();
+                    tx_simulate.send(source);
                 },
                 Input::Button(args) => {
                     match args.button {

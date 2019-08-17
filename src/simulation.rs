@@ -5,27 +5,34 @@ use std::time::Duration;
 use std::error::Error;
 
 #[path = "./httpclient.rs"] mod httpclient;
+use crate::sources;
 
 
-pub fn simulate(trigger: Receiver<String>, out: Sender<AircraftData>) {
+pub fn simulate(trigger: Receiver<sources::Source>, out: Sender<AircraftData>) {
     loop {
-        trigger.recv().and_then(|url| {
+        trigger.recv().and_then(|source| {
             println!("Simulating...");
 
-            match httpclient::get(url.as_str()) {
-                Err(e) => println!("Retrieval error; {}", e.description()),
-                Ok(data) =>
-                    match out.send(parse_data(data)) {
-                        Err(e) => println!("Send error: {}", e.description()),
-                        _ => ()
-                    }
+            if source.should_use_cache() {
+                // @TODO: Implement local cache storage
+                eprintln!("Local cached data not yet implemented");
+            }
+            else {
+                match httpclient::get(source.get_path().as_str()) {
+                    Err(e) => println!("Retrieval error; {}", e.description()),
+                    Ok(data) =>
+                        match out.send(parse_data(data)) {
+                            Err(e) => println!("Send error: {}", e.description()),
+                            _ => ()
+                        }
+                }
             }
             Ok(())
         });
     }
 }
 
-pub fn periodic_trigger(trigger: Sender<String>, request: String, interval: u64) {
+pub fn periodic_trigger(trigger: Sender<sources::Source>, request: sources::Source, interval: u64) {
     loop {
         thread::sleep(Duration::from_secs(interval));
         trigger.send(request.clone());
