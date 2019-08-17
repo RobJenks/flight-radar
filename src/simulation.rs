@@ -6,15 +6,13 @@ use std::error::Error;
 
 #[path = "./httpclient.rs"] mod httpclient;
 
-const SOURCE: &str = "https://opensky-network.org/api/states/all";
 
-
-pub fn simulate(trigger: Receiver<()>, out: Sender<AircraftData>) {
+pub fn simulate(trigger: Receiver<String>, out: Sender<AircraftData>) {
     loop {
-        trigger.recv().and_then(|_| {
+        trigger.recv().and_then(|url| {
             println!("Simulating...");
 
-            match httpclient::get(SOURCE) {
+            match httpclient::get(url.as_str()) {
                 Err(e) => println!("Retrieval error; {}", e.description()),
                 Ok(data) =>
                     match out.send(parse_data(data)) {
@@ -27,10 +25,10 @@ pub fn simulate(trigger: Receiver<()>, out: Sender<AircraftData>) {
     }
 }
 
-pub fn periodic_trigger(trigger: Sender<()>, interval: u64) {
+pub fn periodic_trigger(trigger: Sender<String>, request: String, interval: u64) {
     loop {
         thread::sleep(Duration::from_secs(interval));
-        trigger.send(());
+        trigger.send(request.clone());
     };
 }
 

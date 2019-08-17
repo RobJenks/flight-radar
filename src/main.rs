@@ -11,6 +11,7 @@ use image::Rgba;
 use std::time::Duration;
 
 mod aircraft;
+mod sources;
 mod simulation;
 mod rendering;
 
@@ -25,6 +26,9 @@ fn main() {
 
     window.set_lazy(false);
 
+    let cred = get_creds();
+    println!("Connected to {} sources", if cred.is_some() { "authenticated" } else { "unauthenticated" });
+
     let mut data: AircraftData = AircraftData::empty();
 
     // Channel (Event loop -> trigger simulation)
@@ -35,8 +39,10 @@ fn main() {
     let (tx_data, rx_data) = mpsc::channel();
 
     // Simulation thread and periodic trigger
-    thread::spawn(|| simulation::simulate(rx_simulate, tx_data));
-    thread::spawn(|| simulation::periodic_trigger(tx_periodic_simulation, 5));
+    let state_vector_source = sources::source_state_vectors(cred);
+    let periodic_simulation_source = state_vector_source.clone();
+    thread::spawn(move || simulation::simulate(rx_simulate, tx_data));
+    thread::spawn(move || simulation::periodic_trigger(tx_periodic_simulation, periodic_simulation_source, 2));
 
     let mut draw_size: [u32; 2] = [window.draw_size().width as u32, window.draw_size().height as u32];
     let mut canvas: rendering::BackBuffer = image::ImageBuffer::new(draw_size[0], draw_size[1]);
@@ -52,9 +58,8 @@ fn main() {
                     texture_context = TextureContext { factory: window.factory.clone(), encoder: window.factory.create_command_buffer().into() };
                     texture = Texture::from_image(&mut texture_context,&canvas, &TextureSettings::new()).unwrap();
 
-                    tx_simulate.send(());
+                    tx_simulate.send(state_vector_source.clone());
                 },
-                //Input::Move(mv) => println!("{:?}", mv),
                 _ => ()
             }
             Event::Loop(event) => match event {
@@ -87,12 +92,9 @@ fn main() {
     }
 }
 
-//fn create_buffer(window: &mut PistonWindow, size: [u32; 2]) -> (BackBuffer, G2dTexture, TextureContext) {
-//    let canvas = image::ImageBuffer::new(size[0], size[1]);
-//    let mut texture_context = TextureContext { factory: window.factory.clone(), encoder: window.factory.create_command_buffer().into() };
-//    let mut texture: G2dTexture = Texture::from_image(&mut texture_context,&canvas, &TextureSettings::new())
-//        .unwrap_or_else(|_| panic!("Failed to create buffer texture"));
-//
-//    (canvas, texture, texture_context)
-//
-//}
+fn get_creds() -> Option<String> {
+    match std::fs::read_to_string("cred") {
+        Ok(x) => Some(x),
+        _ => None
+    }
+}

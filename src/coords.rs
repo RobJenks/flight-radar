@@ -20,10 +20,6 @@ pub fn normalised_mercator_coords(lon: f64, lat: f64) -> (f64, f64) {
     let merc_n = (std::f64::consts::FRAC_PI_4 + (lat_radians * 0.5)).tan().ln();
     let y = 0.5 - (0.5 * merc_n / (2.0 * std::f64::consts::PI));
 
-    if x < 0.0 || y < 0.0 || x > 1.0 || y > 1.0 {
-        println!("Outside bounds: {}. {}", x, y);
-    }
-
     (x, y)
 }
 

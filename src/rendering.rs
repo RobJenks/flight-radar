@@ -12,26 +12,13 @@ use image::Rgba;
 
 pub type BackBuffer = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
 
-pub fn render<E>(window: &mut PistonWindow, e: &E, r: &RenderArgs, data: &AircraftData)
-    where E: GenericEvent
-{
-    window.draw_2d(e, |context, mut g, device| {
-        let window_size = context.get_view_size();
-        clear([0.0; 4], g);
-
-        let rect = [20.0, 20.0, 2.0, 2.0];
-
-        //data.data.iter().for_each(|x| render_aircraft(x, &context, &mut g, &window_size));
-    });
-}
-
 pub fn render_aircraft(aircraft: &Aircraft, buffer: &mut BackBuffer, view_size: &[u32; 2]) -> bool {
     if let (Some(lon), Some(lat)) = (aircraft.longitude, aircraft.latitude) {
         let (x_norm, y_norm) = coords::normalised_equirectangular_coords(lon, lat);
         let (x, y) = ((x_norm * view_size[0] as f64) as u32, (y_norm * view_size[1] as f64) as u32);
 
         if x <= view_size[0] && y <= view_size[1] {
-            buffer.put_pixel(x, y, colour::RED);
+            buffer.put_pixel(x, y, colour::GREEN);
             return true
         }
     }
