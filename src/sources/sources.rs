@@ -1,3 +1,5 @@
+const CRED_TOKEN: &str = "{CRED}";
+
 pub struct SourceProvider {
     cred: Option<String>,
     use_cache: bool
@@ -5,6 +7,7 @@ pub struct SourceProvider {
 
 pub struct Source {
     path: String,
+    cred: Option<String>,
     use_cache: bool
 }
 
@@ -18,9 +21,9 @@ impl SourceProvider {
 
     fn source(&self, path: String) -> Source {
         Source::new(format!("https://{}opensky-network.org/api{}",
-                            *self.cred.as_ref().unwrap_or(&String::new()),
+                            CRED_TOKEN,
                             path),
-                    self.use_cache)
+                    self.cred.clone(), self.use_cache)
     }
 
     pub fn source_state_vectors(&self) -> Source {
@@ -29,23 +32,31 @@ impl SourceProvider {
 }
 
 impl Source {
-    pub fn new(path: String, use_cache: bool) -> Self {
-        Self { path, use_cache }
+    pub fn new(path: String, cred: Option<String>, use_cache: bool) -> Self {
+        Self { path, cred, use_cache }
     }
 
-    pub fn get_path(&self) -> String { return self.path.clone() }
+    fn resolve_path(&self, cred: &Option<String>) -> String {
+        return self.path
+            .replace(CRED_TOKEN,
+                cred.as_ref().map(|s| s.as_str()).unwrap_or_else(|| "")
+            )
+    }
+
+    pub fn get_path(&self) -> String {
+        self.resolve_path(&self.cred)
+    }
+
+    pub fn get_underlying_path(&self) -> String {
+        self.resolve_path(&None)
+    }
+
     pub fn should_use_cache(&self) -> bool { return self.use_cache; }
-
-    pub fn _get_cache_key(&self) -> String {    // @Unused
-        self.path.chars()
-            .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-            .collect::<String>()
-    }
 }
 
 impl Clone for Source {
     fn clone(&self) -> Self {
-        Self { path: self.path.clone(), use_cache: self.use_cache }
+        Self { path: self.path.clone(), cred: self.cred.clone(), use_cache: self.use_cache }
     }
 }
 

@@ -4,26 +4,38 @@ use std::time::Duration;
 use std::error::Error;
 
 use crate::data::aircraft::AircraftData;
-use crate::sources::{sources, httpclient};
+use crate::sources::{sources, httpclient, caching};
+use crate::sources::caching::FilesystemCache;
 
 
 pub fn simulate(trigger: Receiver<sources::Source>, out: Sender<AircraftData>) {
+    let cache = caching::FilesystemCache::new();
     loop {
         trigger.recv()
             .and_then(|source| {
                 println!("Simulating...");
 
-                if source.should_use_cache() {
-                    // @Todo: Implement local cache storage
-                    eprintln!("Local cached data not yet implemented");
+                let data = if source.should_use_cache() {
+                    let key = FilesystemCache::cache_key(&source.get_underlying_path());
+                    cache.get(&key)
+                        .map(|data| Some(data))
+                        .unwrap_or_else(|e| {
+                            eprintln!("Cannot retrieve \"{}\" from cache: {}", key, e.description());
+                            None
+                        })
                 } else {
-                    match httpclient::get(source.get_path().as_str()) {
-                        Err(e) => println!("Retrieval error; {}", e.description()),
-                        Ok(data) =>
-                            match out.send(parse_data(data)) {
-                                Err(e) => println!("Send error: {}", e.description()),
-                                _ => ()
-                            }
+                    httpclient::get(source.get_path().as_str())
+                        .map(|data| Some(data))
+                        .unwrap_or_else(|e| {
+                            eprintln!("Remote retrieval error: {}", e.description());
+                            None
+                        })
+                };
+
+                if let Some(data) = data {
+                    match out.send(parse_data(data)) {
+                        Err(e) => eprintln!("Send error: {}", e.description()),
+                        _ => ()
                     }
                 }
                 Ok(())

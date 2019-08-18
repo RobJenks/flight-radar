@@ -29,7 +29,7 @@ fn main() {
 
     // Source provider
     let cred = get_creds();
-    let source_provider = SourceProvider::new(cred, false);
+    let source_provider = SourceProvider::new(cred, true);
     println!("Connected to {} sources", if source_provider.is_authenticated() { "authenticated" } else { "unauthenticated" });
 
     let mut data: AircraftData;
