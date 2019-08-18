@@ -26,7 +26,7 @@ impl<V, F> FilesystemCache<V, F>
 
     pub fn get(&mut self, key: &String) -> std::io::Result<V> {
         self.data.get(key)
-            .map(|x| Ok(x.clone()))                              // Either return locally-cached version
+            .map(|x| Ok(x.clone()))                                 // Either return locally-cached version
             .unwrap_or_else(|| {                                         // Or attempt to retrieve from filesystem
                 std::fs::read_to_string(&self.cache_path(key))
                     .map(|x| (self.transform)(&x))
