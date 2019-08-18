@@ -4,4 +4,4 @@
 **/*.rs.bk
 **/cred
 images
-./*.png
+/*.png

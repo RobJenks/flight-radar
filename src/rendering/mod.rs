@@ -1,14 +1,8 @@
-use std::thread;
-use std::sync::mpsc::{Sender, Receiver};
-use crate::aircraft::{Aircraft, AircraftData};
-use std::time::Duration;
-use ::image;
-use piston_window::*;
-use piston_window::math::Vec2d;
-use image::Rgba;
+#![allow(dead_code)] pub mod colour;
 
-#[path = "./colour.rs"] mod colour;
-#[path = "./coords.rs"] mod coords;
+use ::image;
+use crate::data::aircraft::{Aircraft};
+use crate::geo::coords;
 
 pub type BackBuffer = image::ImageBuffer<image::Rgba<u8>, Vec<u8>>;
 

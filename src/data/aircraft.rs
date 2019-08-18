@@ -1,6 +1,5 @@
-use serde::*;//::{Serialize, Deserialize, Deserializer};
-use serde_tuple::*;//{Deserialize_tuple};
-use serde_json;
+use serde::*;
+use serde_tuple::*;
 
 #[derive(Clone, Debug, Serialize, Deserialize_tuple)]
 pub struct Aircraft {
@@ -32,7 +31,7 @@ pub struct AircraftData {
 }
 
 impl AircraftData {
-    pub fn empty() -> Self {
+    pub fn _empty() -> Self {
         Self { time: 0, data: vec![] }
     }
 }

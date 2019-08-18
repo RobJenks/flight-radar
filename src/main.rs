@@ -1,18 +1,17 @@
-#![feature(async_await)]
-
 extern crate piston_window;
 extern crate chrono;
 
 use piston_window::*;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use std::thread;
 use std::sync::mpsc;
 use ::image;
-use image::{Rgba, ImageFormat};
-use std::time::Duration;
-use crate::aircraft::{Aircraft, AircraftData};
+use image::ImageFormat;
+use crate::data::aircraft::AircraftData;
+use crate::sources::sources::SourceProvider;
 
-mod aircraft;
+mod data;
+mod geo;
 mod sources;
 mod simulation;
 mod rendering;
@@ -30,10 +29,10 @@ fn main() {
 
     // Source provider
     let cred = get_creds();
-    let source_provider = sources::SourceProvider::new(cred, false);
+    let source_provider = SourceProvider::new(cred, false);
     println!("Connected to {} sources", if source_provider.is_authenticated() { "authenticated" } else { "unauthenticated" });
 
-    let mut data: AircraftData = AircraftData::empty();
+    let mut data: AircraftData;
 
     // Channel (Event loop -> trigger simulation)
     let (tx_simulate, rx_simulate) = mpsc::channel();
@@ -54,7 +53,7 @@ fn main() {
 
     while let Some(e) = window.next() {
         match e {
-            Event::Input(event, timestamp) => match event {
+            Event::Input(event, _timestamp) => match event {
                 Input::Resize(args) => {
                     draw_size = args.draw_size;
                     canvas = image::ImageBuffer::new(draw_size[0], draw_size[1]);
@@ -62,7 +61,9 @@ fn main() {
                     texture = Texture::from_image(&mut texture_context,&canvas, &TextureSettings::new()).unwrap();
 
                     let source = source_provider.source_state_vectors();
-                    tx_simulate.send(source);
+                    tx_simulate
+                        .send(source)
+                        .expect("Failed to trigger simulation cycle");
                 },
                 Input::Button(args) => {
                     match args.button {
@@ -75,9 +76,9 @@ fn main() {
             Event::Loop(event) => match event {
                 Loop::Render(r) => {
                     texture.update(&mut texture_context, &canvas).unwrap();
-                    window.draw_2d(&e, |context: Context, mut g, device| {
+                    window.draw_2d(&e, |_context: Context, g, device| {
                         // Global transform to a [0.0 1.0] coordinate space, in each axis
-                        let (size_x, size_y) = (draw_size[0] as f64, draw_size[1] as f64);
+                        let (size_x, size_y) = (r.draw_size[0] as f64, r.draw_size[1] as f64);
                         let context = piston_window::Context::new_abs(size_x, size_y).scale(size_x, size_y);
 
                         clear([0.0; 4], g);
@@ -86,19 +87,18 @@ fn main() {
                         image(&texture, context.scale(1.0 / texture.get_width() as f64, 1.0 / texture.get_height() as f64).transform, g);
                     });
                 },
-                Loop::AfterRender(ar) => {
-                    rx_data.try_recv()
-                        .and_then(|d| {
-                            data = d;
+                Loop::AfterRender(_ar) => {
+                    if let Ok(d) = rx_data.try_recv() {
+                        data = d;
 
-                            rendering::clear_backbuffer(&mut canvas);
+                        rendering::clear_backbuffer(&mut canvas);
+                        let rendered = data.data.iter()
+                            .map(|x| rendering::render_aircraft(x, &mut canvas, &draw_size))
+                            .filter(|&x| x)
+                            .count();
 
-                            Ok(data.data.iter()
-                                .map(|x| rendering::render_aircraft(x, &mut canvas, &draw_size))
-                                .filter(|&x| x)
-                                .count())
-
-                    }).and_then(|x| { println!("Rendered count: {}", x); Ok(())});
+                        println!("Processed: {}, Rendered: {}", data.data.len(), rendered);
+                    }
                 },
                 _ => ()
             },
@@ -116,7 +116,11 @@ fn get_creds() -> Option<String> {
 
 fn screenshot(buffer: &rendering::BackBuffer) {
     let filename = format!("image-{}.png", Utc::now().format("%Y%m%d-%H%M%S"));
-    buffer.save_with_format(filename.as_str(), ImageFormat::PNG);
-
-    println!("Screenshot saved to \"{}\"", filename);
+    buffer
+        .save_with_format(filename.as_str(), ImageFormat::PNG)
+        .and_then(|_| {
+            println!("Screenshot saved to \"{}\"", filename);
+            Ok(())
+        })
+        .expect("Failed to save screenshot");
 }

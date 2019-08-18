@@ -1,5 +1,3 @@
-use std::str::Chars;
-
 pub struct SourceProvider {
     cred: Option<String>,
     use_cache: bool
@@ -15,14 +13,14 @@ impl SourceProvider {
         Self { cred, use_cache }
     }
 
+    pub fn _should_use_cache(&self) -> bool { return self.use_cache; }  // @Unused
     pub fn is_authenticated(&self) -> bool { return self.cred.is_some() }
-    pub fn should_use_cache(&self) -> bool { return self.use_cache; }
 
     fn source(&self, path: String) -> Source {
-        Source { path: format!("https://{}opensky-network.org/api{}",
-                               *self.cred.as_ref().unwrap_or(&String::new()),
-                               path),
-                 use_cache: self.use_cache }
+        Source::new(format!("https://{}opensky-network.org/api{}",
+                            *self.cred.as_ref().unwrap_or(&String::new()),
+                            path),
+                    self.use_cache)
     }
 
     pub fn source_state_vectors(&self) -> Source {
@@ -38,7 +36,7 @@ impl Source {
     pub fn get_path(&self) -> String { return self.path.clone() }
     pub fn should_use_cache(&self) -> bool { return self.use_cache; }
 
-    pub fn get_cache_key(&self) -> String {
+    pub fn _get_cache_key(&self) -> String {    // @Unused
         self.path.chars()
             .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
             .collect::<String>()
