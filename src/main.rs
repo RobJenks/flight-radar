@@ -75,10 +75,15 @@ fn main() {
             Event::Loop(event) => match event {
                 Loop::Render(r) => {
                     texture.update(&mut texture_context, &canvas).unwrap();
-                    window.draw_2d(&e, |context, mut g, device| {
-                        texture_context.encoder.flush(device);
+                    window.draw_2d(&e, |context: Context, mut g, device| {
+                        // Global transform to a [0.0 1.0] coordinate space, in each axis
+                        let (size_x, size_y) = (draw_size[0] as f64, draw_size[1] as f64);
+                        let context = piston_window::Context::new_abs(size_x, size_y).scale(size_x, size_y);
+
                         clear([0.0; 4], g);
-                        image(&texture, context.transform, g);
+
+                        texture_context.encoder.flush(device);
+                        image(&texture, context.scale(1.0 / texture.get_width() as f64, 1.0 / texture.get_height() as f64).transform, g);
                     });
                 },
                 Loop::AfterRender(ar) => {
