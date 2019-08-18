@@ -90,14 +90,7 @@ fn main() {
                 Loop::AfterRender(_ar) => {
                     if let Ok(d) = rx_data.try_recv() {
                         data = d;
-
-                        rendering::clear_backbuffer(&mut canvas);
-                        let rendered = data.data.iter()
-                            .map(|x| rendering::render_aircraft(x, &mut canvas, &draw_size))
-                            .filter(|&x| x)
-                            .count();
-
-                        println!("Processed: {}, Rendered: {}", data.data.len(), rendered);
+                        prepare_backbuffer(&mut canvas, &draw_size, &data);
                     }
                 },
                 _ => ()
@@ -105,6 +98,21 @@ fn main() {
             _ => ()
         }
     }
+}
+
+fn prepare_backbuffer(buffer: &mut rendering::BackBuffer, draw_size: &[u32; 2], aircraft: &AircraftData) {
+    rendering::clear_backbuffer(buffer);
+
+    // Render geography
+
+
+    // Render aircraft
+    let rendered = aircraft.data.iter()
+        .map(|x| rendering::render_aircraft(x, buffer, draw_size))
+        .filter(|&x| x)
+        .count();
+
+    println!("Processed: {}, Rendered: {}", aircraft.data.len(), rendered);
 }
 
 fn get_creds() -> Option<String> {
