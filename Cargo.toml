@@ -24,3 +24,6 @@ piston2d-sprite = "0.57.0"
 piston2d-drag_controller = "0.29.0"
 piston2d-deform_grid = "0.4.0"
 shader_version = "0.6.0"
+
+repng = "0.2.2"
+scrap = "0.5.0"
