@@ -9,7 +9,7 @@ use crate::sources::caching::FilesystemCache;
 
 
 pub fn simulate(trigger: Receiver<sources::Source>, out: Sender<AircraftData>) {
-    let cache = caching::FilesystemCache::new();
+    let mut cache = caching::FilesystemCache::new();
     loop {
         trigger.recv()
             .and_then(|source| {
