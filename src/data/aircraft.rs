@@ -31,7 +31,7 @@ pub struct AircraftData {
 }
 
 impl AircraftData {
-    pub fn _empty() -> Self {
+    pub fn empty() -> Self {
         Self { time: 0, data: vec![] }
     }
 }
