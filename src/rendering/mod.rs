@@ -31,12 +31,10 @@ pub fn perform_rendering(g: &mut G2d, context: &Context, render_size: (f64, f64)
     piston_window::clear([0.0, 0.0, 0.0, 1.0], g);
 
     // Render geography
-    let geo_segments_rendered = geo_data.coast
+    geo_data.coast
         .iter()
         .map(|x| render_coastline(x, g, context, render_size, zoom_level, &view_origin))
         .sum::<usize>();
-
-    println!("Rendered {} geo segments", geo_segments_rendered);
 }
 
 fn clear_backbuffer(canvas: &mut BackBuffer) {

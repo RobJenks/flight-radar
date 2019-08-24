@@ -12,8 +12,8 @@ pub struct Source {
 }
 
 impl SourceProvider {
-    pub fn new(cred: Option<String>, use_cache: bool) -> Self {
-        Self { cred, use_cache }
+    pub fn new(cred: &Option<String>, use_cache: bool) -> Self {
+        Self { cred: cred.clone(), use_cache }
     }
 
     pub fn _should_use_cache(&self) -> bool { return self.use_cache; }  // @Unused
