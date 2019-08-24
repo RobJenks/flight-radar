@@ -5,7 +5,6 @@ use std::error::Error;
 
 use crate::data::aircraft::AircraftData;
 use crate::sources::{sources, httpclient, caching};
-use crate::sources::caching::FilesystemCache;
 
 
 pub fn simulate(trigger: Receiver<sources::Source>, out: Sender<AircraftData>) {

@@ -7,7 +7,6 @@ use std::sync::mpsc;
 use ::image;
 use crate::data::aircraft::AircraftData;
 use crate::sources::sources::SourceProvider;
-use gfx::Device;
 use crate::rendering::BackBuffer;
 
 mod data;
@@ -32,7 +31,7 @@ fn main() {
 
     // Source provider
     let cred = get_creds();
-    let source_provider = SourceProvider::new(cred, false);
+    let source_provider = SourceProvider::new(cred, true);
     println!("Connected to {} sources", if source_provider.is_authenticated() { "authenticated" } else { "unauthenticated" });
 
     let mut data: AircraftData = AircraftData::empty();
@@ -58,7 +57,7 @@ fn main() {
 
     let mut cursor_pos = [0.0, 0.0];
     let mut zoom_level = 1.0;
-    let mut zoom_centre = [0.5, 0.5];
+    let mut view_origin = [0.0, 0.0];
 
     while let Some(e) = window.next() {
         match e {
@@ -85,8 +84,8 @@ fn main() {
                     match args {
                         Motion::MouseCursor(cursor) => cursor_pos = cursor,
                         Motion::MouseScroll(scroll) => {
-                            perform_zoom(scroll, cursor_pos, [window.size().width, window.size().height], &mut zoom_level, &mut zoom_centre);
-                            update_backbuffer(&mut canvas, draw_size, zoom_level, &data);
+                            perform_zoom(scroll, cursor_pos, [window.size().width, window.size().height], &mut zoom_level, &mut view_origin);
+                            update_backbuffer(&mut canvas, draw_size, zoom_level, view_origin, &data);
                         },
                         _ => ()
                     }
@@ -94,19 +93,17 @@ fn main() {
                 _ => ()
             }
             Event::Loop(event) => match event {
-                Loop::Render(r) => {
+                Loop::Render(_) => {
                     texture.update(&mut texture_context, &canvas).unwrap();
                     window.draw_2d(&e, |_context: Context, g, device| {
                         // Global transform to a [0.0 1.0] coordinate space, in each axis
-                        let size = (r.draw_size[0] as f64, r.draw_size[1] as f64);
-                        let scaled_size = (size.0 / zoom_level, size.1 / zoom_level);
+                        let scaled_size = (draw_sizef[0] / zoom_level, draw_sizef[1] / zoom_level);
 
-                        let context = piston_window::Context::new_abs(size.0, size.1)
-                            .scale(size.0, size.1)
-                            .trans(0.0, 0.0); //zoom_centre[0] * scaled_size.0, zoom_centre[1] * scaled_size.1);
+                        let context = piston_window::Context::new_abs(draw_sizef[0], draw_sizef[1])
+                            .scale(draw_sizef[0], draw_sizef[1]);
 
                         // Render all window content
-                        rendering::perform_rendering(g, &context, scaled_size, zoom_level, &geo_data);
+                        rendering::perform_rendering(g, &context, scaled_size, zoom_level, view_origin, &geo_data);
 
                         // Apply pre-rendered backbuffer target
                         texture_context.encoder.flush(device);
@@ -117,7 +114,7 @@ fn main() {
                     if let Ok(d) = rx_data.try_recv() {
                         data = d;
                         let dims = [canvas.dimensions().0, canvas.dimensions().1];
-                        update_backbuffer(&mut canvas, dims, zoom_level, &data);
+                        update_backbuffer(&mut canvas, dims, zoom_level, view_origin, &data);
                     }
                 },
                 _ => ()
@@ -134,15 +131,27 @@ fn get_creds() -> Option<String> {
     }
 }
 
-fn update_backbuffer(canvas: &mut BackBuffer, draw_size: [u32; 2], zoom_level: f64, data: &AircraftData) {
-    rendering::prepare_backbuffer(canvas, &draw_size, zoom_level,&data);
+fn update_backbuffer(canvas: &mut BackBuffer, draw_size: [u32; 2], zoom_level: f64, view_origin: [f64; 2], data: &AircraftData) {
+    rendering::prepare_backbuffer(canvas, &draw_size, zoom_level, view_origin,&data);
 }
 
-fn perform_zoom(scroll: [f64; 2], cursor_pos: [f64; 2], window_size: [f64; 2], zoom_level: &mut f64, zoom_centre: &mut [f64; 2]) {
-    let (h_scroll, v_scroll) = (scroll[0], scroll[1]);
+#[allow(unused_parens)]
+fn perform_zoom(scroll: [f64; 2], cursor_pos: [f64; 2], window_size: [f64; 2], zoom_level: &mut f64, view_origin: &mut [f64; 2]) {
+    let (_h_scroll, v_scroll) = (scroll[0], scroll[1]);
 
-    *zoom_centre = [cursor_pos[0] / window_size[0], cursor_pos[1] / window_size[1]];
+    // Set new zoom level
+    let original_zoom_level = *zoom_level;
     *zoom_level += (v_scroll * SCROLL_SCALING_FACTOR);
 
-    println!("Zoom of {:?}, level: {}, centre: {:?} (cursor: {:?}, window_size: {:?})", scroll, zoom_level, zoom_centre, cursor_pos, window_size);
+    // Limit to acceptable bounds
+    (*zoom_level) = (*zoom_level).max(0.1);
+
+    // Determine pan required to maintain consistent zoom target
+    let scale_change = (1.0 / *zoom_level - 1.0 / original_zoom_level);
+    let zoom_point = [cursor_pos[0] / window_size[0],
+                              cursor_pos[1] / window_size[1]];
+
+    let offset = (-(zoom_point[0] * scale_change), -(zoom_point[1] * scale_change));
+    (*view_origin)[0] += offset.0;
+    (*view_origin)[1] += offset.1;
 }

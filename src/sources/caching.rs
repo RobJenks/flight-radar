@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::ErrorKind;
 
 const DEFAULT_LOCATION: &str = "cache";
 
