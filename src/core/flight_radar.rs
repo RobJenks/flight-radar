@@ -14,6 +14,10 @@ use crate::data::aircraft::AircraftData;
 use crate::rendering::BackBuffer;
 use std::cell::{RefCell, Ref, RefMut};
 
+const MOUSE_LEFT: usize = 0;
+const MOUSE_RIGHT: usize = 1;
+const MOUSE_BUTTON_COUNT: usize = 2;
+
 const SCROLL_SCALING_FACTOR: f64 = 0.1;
 
 
@@ -30,7 +34,9 @@ pub struct FlightRadar {
 
     zoom_level: f64,
     view_origin: [f64; 2],
-    cursor_pos: [f64; 2]
+    cursor_pos: [f64; 2],
+
+    mouse_down_point: [Option<[f64; 2]>; MOUSE_BUTTON_COUNT]
 }
 
 impl FlightRadar {
@@ -68,13 +74,19 @@ impl FlightRadar {
                     },
                     Input::Button(args) => {
                         match args.button {
-                            Button::Keyboard(Key::F12) if args.state == ButtonState::Release => rendering::screenshot::display_screenshot(),
+                            Button::Keyboard(key) if args.state == ButtonState::Press => self.key_down(&key),
+                            Button::Keyboard(key) if args.state == ButtonState::Release => self.key_up(&key),
+
+                            Button::Mouse(button) if args.state == ButtonState::Press => self.mouse_down(&button),
+                            Button::Mouse(button) if args.state == ButtonState::Release => self.mouse_up(&button),
+
                             _ => ()
                         }
                     },
                     Input::Move(args) => {
                         match args {
-                            Motion::MouseCursor(cursor) => self.cursor_pos = cursor,
+                            Motion::MouseCursor(cursor) => self.mouse_move(&cursor),
+                            Motion::MouseRelative(movement) => self.mouse_move_relative(&movement),
                             Motion::MouseScroll(scroll) => {
                                 self.perform_zoom(scroll);
                                 self.update_backbuffer();
@@ -100,9 +112,11 @@ impl FlightRadar {
                             // Render all window content
                             rendering::perform_rendering(g, &context, scaled_size, zoom_level, view_origin, &self.geo_data);
 
-                            // Apply pre-rendered backbuffer target
-                            texture_context.encoder.flush(device);
-                            image(&texture, context.scale(1.0 / texture.get_width() as f64, 1.0 / texture.get_height() as f64).transform, g);
+                            // Apply pre-rendered backbuffer target (if not panning the map)
+                            if !self.is_mouse_dragging(MOUSE_RIGHT) {
+                                texture_context.encoder.flush(device);
+                                image(&texture, context.scale(1.0 / texture.get_width() as f64, 1.0 / texture.get_height() as f64).transform, g);
+                            }
                         });
                     },
                     Loop::AfterRender(_ar) => {
@@ -116,6 +130,56 @@ impl FlightRadar {
                 _ => ()
             }
         }
+    }
+
+    fn key_down(&mut self, key: &Key) {
+        match key {
+            Key::F12 => rendering::screenshot::display_screenshot(),
+
+            _ => ()
+        }
+    }
+
+    fn key_up(&mut self, _key: &Key) { }
+
+    fn mouse_down(&mut self, button: &MouseButton) {
+        if let Some(ix) = FlightRadar::mouse_button_index(button) {
+            self.mouse_down_point[ix] = Some(self.cursor_pos.clone());
+        }
+    }
+
+    fn mouse_up(&mut self, button: &MouseButton) {
+        if let Some(ix) = FlightRadar::mouse_button_index(button) {
+            match ix {
+                MOUSE_RIGHT => self.update_backbuffer(),   // Post-drag
+                _ => ()
+            }
+
+            self.mouse_down_point[ix] = None;
+        }
+    }
+
+    fn mouse_move(&mut self, cursor: &[f64; 2]) {
+        self.cursor_pos = *cursor;
+    }
+
+    fn mouse_move_relative(&mut self, movement: &[f64; 2]) {
+        if self.mouse_is_down(MOUSE_RIGHT) {
+            self.pan_view([
+                -(movement[0] / self.draw_sizef[0]),
+                -(movement[1] / self.draw_sizef[1])
+            ]);
+        }
+    }
+
+    fn mouse_is_down(&self, button: usize) -> bool {
+        self.mouse_down_point[button].is_some()
+    }
+
+    fn is_mouse_dragging(&self, button: usize) -> bool {
+        self.mouse_down_point[button]
+            .and_then(|start| Some(start != self.cursor_pos))
+            .unwrap_or(false)
     }
 
     fn window(& self) -> Ref<PistonWindow> {
@@ -140,7 +204,7 @@ impl FlightRadar {
     }
 
     fn update_backbuffer(&mut self) {
-        rendering::prepare_backbuffer(&mut self.canvas, &self.draw_size, self.zoom_level, self.view_origin,&self.data);
+        rendering::prepare_backbuffer(&mut self.canvas, &self.draw_size, self.zoom_level, self.view_origin, &self.data);
     }
 
     #[allow(unused_parens)]
@@ -162,6 +226,13 @@ impl FlightRadar {
         let offset = (-(zoom_point[0] * scale_change), -(zoom_point[1] * scale_change));
         self.view_origin[0] += offset.0;
         self.view_origin[1] += offset.1;
+    }
+
+    fn pan_view(&mut self, pan: [f64; 2]) {
+        self.view_origin = [
+            self.view_origin[0] + pan[0],
+            self.view_origin[1] + pan[1]
+        ];
     }
 
 
@@ -193,7 +264,9 @@ impl FlightRadar {
 
             zoom_level: 1.0,
             view_origin: [0.0, 0.0],
-            cursor_pos: [0.0, 0.0]
+            cursor_pos: [0.0, 0.0],
+
+            mouse_down_point: [None; MOUSE_BUTTON_COUNT]
         }
     }
 
@@ -211,6 +284,15 @@ impl FlightRadar {
     fn init_creds() -> Option<String> {
         match std::fs::read_to_string("cred") {
             Ok(x) => Some(x),
+            _ => None
+        }
+    }
+
+    fn mouse_button_index(button: &MouseButton) -> Option<usize> {
+        match button {
+            MouseButton::Left => Some(MOUSE_LEFT),
+            MouseButton::Right => Some(MOUSE_RIGHT),
+
             _ => None
         }
     }
