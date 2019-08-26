@@ -215,7 +215,9 @@ impl FlightRadar {
 
     fn is_mouse_dragging(&self, button: usize) -> bool {
         self.mouse_down_point[button]
-            .and_then(|start| Some(start != self.cursor_pos))
+            .and_then(|start| Some(
+                (start[0] - self.cursor_pos[0]).abs() + (start[1] - self.cursor_pos[1]).abs() > MAX_OBJECT_SELECT_DISTANCE_SQ
+            ))
             .unwrap_or(false)
     }
 
