@@ -45,8 +45,8 @@ fn render_aircraft(aircraft: &Aircraft, buffer: &mut BackBuffer, view_size: &[u3
     if let (Some(lon), Some(lat)) = (aircraft.longitude, aircraft.latitude) {
         let (x_norm, y_norm) = coords::normalised_equirectangular_coords(lon, lat);
         let (x_norm_scaled, y_norm_scaled) = (
-            (x_norm * zoom_level) - (view_origin[0] - 0.0),
-            (y_norm * zoom_level) - (view_origin[1] - 0.0)
+            (x_norm - view_origin[0]) * zoom_level,
+            (y_norm - view_origin[1]) * zoom_level
         );
 
         if x_norm_scaled >= 0.0 && y_norm_scaled >= 0.0 && x_norm_scaled < 1.0 && y_norm_scaled < 1.0 {
@@ -63,7 +63,8 @@ fn render_coastline(data: &CoastlineDataEntry, g: &mut piston_window::G2d, conte
                     _render_size: (f64, f64), zoom_level: f64, view_origin: &[f64; 2]) -> usize {
     let transformed = data.vertices.iter()
         .map(|v| coords::normalised_equirectangular_coords(v[0], v[1]))
-        .map(|v| [v.0 * zoom_level - (view_origin[0] - 0.0), v.1 * zoom_level - (view_origin[1] - 0.0)])
+        //.map(|v| [v.0 * zoom_level - (view_origin[0] - 0.0), v.1 * zoom_level - (view_origin[1] - 0.0)])
+        .map(|v| [(v.0 - view_origin[0]) * zoom_level, (v.1 - view_origin[1]) * zoom_level])
         .collect::<Vec<[f64; 2]>>();
 
     (0..(transformed.len() - 1))

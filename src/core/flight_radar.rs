@@ -19,6 +19,7 @@ const MOUSE_RIGHT: usize = 1;
 const MOUSE_BUTTON_COUNT: usize = 2;
 
 const SCROLL_SCALING_FACTOR: f64 = 0.1;
+const PAN_SCALING_FACTOR: f64 = 1.5;
 
 
 pub struct FlightRadar {
@@ -30,6 +31,7 @@ pub struct FlightRadar {
 
     draw_size: [u32; 2],
     draw_sizef: [f64; 2],
+    window_size: Size,
     canvas: BackBuffer,
 
     zoom_level: f64,
@@ -64,7 +66,8 @@ impl FlightRadar {
             match e {
                 Event::Input(event, _timestamp) => match event {
                     Input::Resize(args) => {
-                        self.update_size(&args.draw_size);
+                        let window_size = self.window().size();
+                        self.update_size(&args.draw_size, window_size);
 
                         let factory: GfxFactory = self.window().factory.clone();
                         texture_context = TextureContext { factory, encoder: self.window_mut().factory.create_command_buffer().into() };
@@ -102,6 +105,7 @@ impl FlightRadar {
                         let zoom_level = self.zoom_level;
                         let view_origin = self.view_origin;
                         let render_size = self.draw_sizef;
+                        let window_size = self.window_size;
                         let scaled_size = (self.draw_sizef[0] / self.zoom_level, self.draw_sizef[1] / self.zoom_level);
 
                         self.window.borrow_mut().draw_2d(&e, |_context: Context, g, device| {
@@ -116,6 +120,12 @@ impl FlightRadar {
                             if !self.is_mouse_dragging(MOUSE_RIGHT) {
                                 texture_context.encoder.flush(device);
                                 image(&texture, context.scale(1.0 / texture.get_width() as f64, 1.0 / texture.get_height() as f64).transform, g);
+                            }
+
+                            // Draw zoom box if relevant
+                            if self.is_mouse_dragging(MOUSE_LEFT) {
+                                let rect = self.get_drag_selection(MOUSE_LEFT, &window_size).unwrap_or_else(|| panic!("No drag data"));
+                                rectangle(rendering::colour::COLOUR_SELECTION, rect, context.transform, g);
                             }
                         });
                     },
@@ -151,7 +161,14 @@ impl FlightRadar {
     fn mouse_up(&mut self, button: &MouseButton) {
         if let Some(ix) = FlightRadar::mouse_button_index(button) {
             match ix {
-                MOUSE_RIGHT => self.update_backbuffer(),   // Post-drag
+                MOUSE_LEFT => {         // Post-selection drag
+                    let rect = self.get_drag_selection(MOUSE_LEFT, &self.window_size).unwrap_or_else(|| panic!("No drag data"));
+                    self.zoom_to(&rect);
+                    self.update_backbuffer();
+                }
+                MOUSE_RIGHT => {        // Post-drag
+                    self.update_backbuffer()
+                },
                 _ => ()
             }
 
@@ -165,10 +182,12 @@ impl FlightRadar {
 
     fn mouse_move_relative(&mut self, movement: &[f64; 2]) {
         if self.mouse_is_down(MOUSE_RIGHT) {
-            self.pan_view([
-                -(movement[0] / self.draw_sizef[0]),
-                -(movement[1] / self.draw_sizef[1])
-            ]);
+            self.pan_view(
+                self.adjust_pan_for_map_settings([
+                    -(movement[0] / self.draw_sizef[0]),
+                    -(movement[1] / self.draw_sizef[1])
+                ])
+            );
         }
     }
 
@@ -182,6 +201,23 @@ impl FlightRadar {
             .unwrap_or(false)
     }
 
+    fn get_drag_selection(&self, button: usize, window_size: &Size) -> Option<[f64; 4]> {
+        if self.is_mouse_dragging(button) {
+            let (nx, ny) = (|x| x / window_size.width, |y| y / window_size.height);
+
+            let start = self.mouse_down_point[button].unwrap_or_else(|| panic!("No mouse down start location"));
+            Some([nx(start[0]), ny(start[1]), nx(self.cursor_pos[0] - start[0]), ny(self.cursor_pos[1] - start[1])])
+        }
+        else {
+            None
+        }
+    }
+
+    fn get_unzoomed_position(&self, pos: [f64; 2]) -> [f64; 2] {
+        [self.view_origin[0] + (pos[0] / self.zoom_level),
+         self.view_origin[1] + (pos[1] / self.zoom_level)]
+    }
+
     fn window(& self) -> Ref<PistonWindow> {
         self.window.borrow()
     }
@@ -190,9 +226,10 @@ impl FlightRadar {
         self.window.borrow_mut()
     }
 
-    fn update_size(&mut self, size: &[u32; 2]) {
+    fn update_size(&mut self, size: &[u32; 2], window_size: Size) {
         self.draw_size = *size;
         self.draw_sizef = [self.draw_size[0] as f64, self.draw_size[1] as f64];
+        self.window_size = window_size;
 
         self.canvas = image::ImageBuffer::new(self.draw_size[0], self.draw_size[1]);
     }
@@ -219,7 +256,7 @@ impl FlightRadar {
         self.zoom_level = self.zoom_level.max(0.1);
 
         // Determine pan required to maintain consistent zoom target
-        let size: Size = self.window().draw_size();
+        let size = self.window_size;
         let scale_change = (1.0 / self.zoom_level - 1.0 / original_zoom_level);
         let zoom_point = [self.cursor_pos[0] / size.width, self.cursor_pos[1] / size.height];
 
@@ -228,11 +265,27 @@ impl FlightRadar {
         self.view_origin[1] += offset.1;
     }
 
+    fn zoom_to(&mut self, rect: &[f64; 4]) {
+        let origin = [rect[0], rect[1]];
+        let (width, height) = (rect[2] / self.zoom_level, rect[3] / self.zoom_level);
+
+        self.view_origin = self.get_unzoomed_position(origin);
+        self.zoom_level = (1.0 / width).min(1.0 / height);
+        println!("rect: {:?}, width: {}, height: {}, new origin: {:?}, new zoom level: {}", rect, width, height, self.view_origin, self.zoom_level);
+    }
+
     fn pan_view(&mut self, pan: [f64; 2]) {
         self.view_origin = [
             self.view_origin[0] + pan[0],
             self.view_origin[1] + pan[1]
         ];
+    }
+
+    fn adjust_pan_for_map_settings(&self, pan: [f64; 2]) -> [f64; 2] {
+        [
+            (pan[0] * PAN_SCALING_FACTOR) / self.zoom_level,
+            (pan[1] * PAN_SCALING_FACTOR) / self.zoom_level
+        ]
     }
 
 
@@ -248,6 +301,7 @@ impl FlightRadar {
 
         let draw_size: [u32; 2] = [window.draw_size().width as u32, window.draw_size().height as u32];
         let draw_sizef: [f64; 2] = [draw_size[0] as f64, draw_size[1] as f64];
+        let window_size = window.draw_size();
         let canvas: BackBuffer = image::ImageBuffer::new(draw_size[0], draw_size[1]);
 
 
@@ -260,6 +314,7 @@ impl FlightRadar {
 
             draw_size,
             draw_sizef,
+            window_size,
             canvas,
 
             zoom_level: 1.0,

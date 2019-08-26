@@ -12,7 +12,7 @@ fn main() {
     let mut flight_radar = flight_radar::FlightRadar::create(
         flight_radar::BuildOptions {
             gl_version: OpenGL::V4_5,
-            use_cache: false
+            use_cache: true
         }
     );
 
