@@ -10,8 +10,9 @@ use crate::sources;
 use crate::simulation;
 use crate::rendering;
 use crate::data::geography;
-use crate::data::aircraft::{AircraftData, Aircraft};
+use crate::data::aircraft::{AircraftData};
 use crate::rendering::BackBuffer;
+use crate::text;
 use std::cell::{RefCell, Ref, RefMut};
 use crate::geo::coords::{lon_lat_to_map, window_to_map};
 
@@ -24,10 +25,10 @@ const PAN_SCALING_FACTOR: f64 = 1.5;
 
 const MAX_OBJECT_SELECT_DISTANCE_SQ: f64 = 2.0 * 2.0;
 
-
 pub struct FlightRadar {
     window: RefCell<PistonWindow>,
     source_provider: SourceProvider,
+    text_manager: RefCell<text::TextManager>,
 
     data: AircraftData,
     geo_data: geography::GeoData,
@@ -110,6 +111,8 @@ impl FlightRadar {
                         let render_size = self.draw_sizef;
                         let window_size = self.window_size;
                         let scaled_size = (self.draw_sizef[0] / self.zoom_level, self.draw_sizef[1] / self.zoom_level);
+                        let mut text_manager = self.text_manager.borrow_mut();
+                        let glyph_cache = text_manager.glyph_cache();
 
                         self.window.borrow_mut().draw_2d(&e, |_context: Context, g, device| {
                             // Global transform to a [0.0 1.0] coordinate space, in each axis
@@ -130,6 +133,11 @@ impl FlightRadar {
                                 let rect = self.get_drag_selection(MOUSE_LEFT, &window_size).unwrap_or_else(|| panic!("No drag data"));
                                 rectangle(rendering::colour::COLOUR_SELECTION, rect, context.transform, g);
                             }
+
+                            self.render_text("This is a test message", &[0.2,0.3], [1.0,0.0,0.0,1.0], 48, glyph_cache, &context, g);
+//
+
+                            glyph_cache.factory.encoder.flush(device);
                         });
                     },
                     Loop::AfterRender(_ar) => {
@@ -254,7 +262,7 @@ impl FlightRadar {
         let (index, distsq) = self.data.data
             .iter()
             .enumerate()
-            .filter(|(i, x)| x.longitude.is_some() && x.latitude.is_some())
+            .filter(|(_, x)| x.longitude.is_some() && x.latitude.is_some())
             .map(|(i, x)| (i, lon_lat_to_map(x.longitude.unwrap(), x.latitude.unwrap(), &origin, zoom)))
             .map(|(i, pos)| (i, ((pos.0 - loc.0).abs(), (pos.1 - loc.1).abs())))
             .map(|(i, dxy)| (i, dxy.0 * dxy.0 + dxy.1 * dxy.1))  // Squared distance to point
@@ -270,6 +278,18 @@ impl FlightRadar {
         let (x, y) = lon_lat_to_map(obj.longitude.unwrap(), obj.latitude.unwrap(), &self.view_origin, self.zoom_level);
 
         println!("Object: {:?} at {},{}", obj, x, y);
+    }
+
+    fn render_text(&self, text: &str, pos: &[f64; 2], colour: [f32; 4], font_size: u32, glyph_cache: &mut Glyphs, context: &Context, g: &mut G2d) {
+        piston_window::text::Text::new_color(colour, font_size).draw(
+            text,
+            glyph_cache,
+            &context.draw_state,
+            context.transform
+                .scale(1.0 / self.draw_sizef[0], 1.0 / self.draw_sizef[1])
+                .trans(pos[0] * self.draw_sizef[0], pos[1] * self.draw_sizef[1]),
+            g)
+            .unwrap_or_else(|e| panic!("Text rendering failed ({:?})", e));
     }
 
     fn update_size(&mut self, size: &[u32; 2], window_size: Size) {
@@ -336,7 +356,8 @@ impl FlightRadar {
 
 
     pub fn create(options: BuildOptions) -> Self {
-        let window = FlightRadar::init_window(&options);
+        let mut window = FlightRadar::init_window(&options);
+        let text_manager = FlightRadar::init_text_manager(text::DEFAULT_FONT.to_string(), &mut window);
 
         let creds = FlightRadar::init_creds();
         let source_provider = SourceProvider::new(&creds, options.use_cache);
@@ -354,6 +375,7 @@ impl FlightRadar {
         Self {
             window: RefCell::new(window),
             source_provider,
+            text_manager: RefCell::new(text_manager),
 
             data,
             geo_data,
@@ -380,6 +402,13 @@ impl FlightRadar {
 
         window.set_lazy(false);
         window
+    }
+
+    fn init_text_manager(font: String, window: &mut PistonWindow) -> text::TextManager {
+        let glyph_cache = window.load_font(font.as_str())
+            .unwrap_or_else(|e| panic!("Failed to initialise text manager ({:?})", e));
+
+        text::TextManager::create(font, glyph_cache)
     }
 
     fn init_creds() -> Option<String> {

@@ -4,6 +4,7 @@ mod geo;
 mod rendering;
 mod simulation;
 mod sources;
+mod text;
 
 use crate::core::flight_radar;
 use shader_version::OpenGL;
