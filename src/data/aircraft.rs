@@ -35,3 +35,9 @@ impl AircraftData {
         Self { time: 0, data: vec![] }
     }
 }
+
+impl Aircraft {
+    pub fn _has_position_data(&self) -> bool {
+        self.longitude.is_some() && self.latitude.is_some()
+    }
+}

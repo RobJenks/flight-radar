@@ -10,11 +10,12 @@ use crate::sources;
 use crate::simulation;
 use crate::rendering;
 use crate::data::geography;
-use crate::data::aircraft::{AircraftData};
+use crate::data::aircraft::{Aircraft, AircraftData};
 use crate::rendering::BackBuffer;
 use crate::text;
 use std::cell::{RefCell, Ref, RefMut};
-use crate::geo::coords::{lon_lat_to_map, window_to_map};
+use crate::geo::coords::{lon_lat_to_map, window_to_map, in_bounds, normalise_to_window};
+use crate::rendering::colour::COLOUR_SELECTED_OBJECT;
 
 const MOUSE_LEFT: usize = 0;
 const MOUSE_RIGHT: usize = 1;
@@ -24,6 +25,7 @@ const SCROLL_SCALING_FACTOR: f64 = 0.1;
 const PAN_SCALING_FACTOR: f64 = 1.5;
 
 const MAX_OBJECT_SELECT_DISTANCE_SQ: f64 = 2.0 * 2.0;
+const SELECTION_CIRCLE_RADIUS: f64 = 5.0;
 
 pub struct FlightRadar {
     window: RefCell<PistonWindow>,
@@ -42,7 +44,8 @@ pub struct FlightRadar {
     view_origin: [f64; 2],
     cursor_pos: [f64; 2],
 
-    mouse_down_point: [Option<[f64; 2]>; MOUSE_BUTTON_COUNT]
+    mouse_down_point: [Option<[f64; 2]>; MOUSE_BUTTON_COUNT],
+    selected_object: Option<Aircraft>
 }
 
 impl FlightRadar {
@@ -134,8 +137,8 @@ impl FlightRadar {
                                 rectangle(rendering::colour::COLOUR_SELECTION, rect, context.transform, g);
                             }
 
+                            self.render_selected_object_data(glyph_cache, &context, g);
                             self.render_text("This is a test message", &[0.2,0.3], [1.0,0.0,0.0,1.0], 48, glyph_cache, &context, g);
-//
 
                             glyph_cache.factory.encoder.flush(device);
                         });
@@ -259,25 +262,43 @@ impl FlightRadar {
 
         // Get the closest object to this click location
         let (origin, zoom) = (self.view_origin, self.zoom_level);
-        let (index, distsq) = self.data.data
+        let closest = self.data.data
             .iter()
             .enumerate()
             .filter(|(_, x)| x.longitude.is_some() && x.latitude.is_some())
             .map(|(i, x)| (i, lon_lat_to_map(x.longitude.unwrap(), x.latitude.unwrap(), &origin, zoom)))
             .map(|(i, pos)| (i, ((pos.0 - loc.0).abs(), (pos.1 - loc.1).abs())))
             .map(|(i, dxy)| (i, dxy.0 * dxy.0 + dxy.1 * dxy.1))  // Squared distance to point
-            .fold((0, 1e6f64), |(ix, d2min), (i, d2)| if d2 < d2min {(i, d2)} else {(ix, d2min)});
+            .filter(|(_, d2)| *d2 <= MAX_OBJECT_SELECT_DISTANCE_SQ)
+            .fold(None, |closest: Option<(usize, f64)>, (i, d2)|
+                if closest.is_none() || d2 < closest.unwrap().1 {Some((i, d2))} else {closest});
 
-        if distsq <= MAX_OBJECT_SELECT_DISTANCE_SQ {
-            self.select_object(index);
-        }
+        self.select_object(closest.map(|(index, _)| index));
     }
 
-    fn select_object(&mut self, index: usize) {
-        let obj = &self.data.data[index];
-        let (x, y) = lon_lat_to_map(obj.longitude.unwrap(), obj.latitude.unwrap(), &self.view_origin, self.zoom_level);
+    fn select_object(&mut self, index: Option<usize>) {
+        self.selected_object = index
+            .map(|i| self.data.data[i].clone());
+    }
 
-        println!("Object: {:?} at {},{}", obj, x, y);
+    fn render_selected_object_data(&self, glyph_cache: &mut Glyphs, context: &Context, g: &mut G2d) {
+        if let Some(obj) = &self.selected_object {
+            if let (Some(lon), Some(lat)) = (obj.longitude, obj.latitude) {
+                let (x, y) = lon_lat_to_map(lon, lat, &self.view_origin, self.zoom_level);
+
+                let adj = normalise_to_window(SELECTION_CIRCLE_RADIUS, SELECTION_CIRCLE_RADIUS, &self.draw_sizef);
+                let (select_min, select_max) = (
+                    (x - adj.0, y - adj.1),
+                    (x + adj.0, y + adj.1)
+                );
+
+                ellipse_from_to(COLOUR_SELECTED_OBJECT,
+                                [select_min.0, select_min.1],
+                                [select_max.0, select_max.1], context.transform, g);
+
+                //rectangle([1.0; 4], [x+0.01, y+0.01, 0.3, 0.15], context.transform, g);
+            }
+        }
     }
 
     fn render_text(&self, text: &str, pos: &[f64; 2], colour: [f32; 4], font_size: u32, glyph_cache: &mut Glyphs, context: &Context, g: &mut G2d) {
@@ -389,7 +410,8 @@ impl FlightRadar {
             view_origin: [0.0, 0.0],
             cursor_pos: [0.0, 0.0],
 
-            mouse_down_point: [None; MOUSE_BUTTON_COUNT]
+            mouse_down_point: [None; MOUSE_BUTTON_COUNT],
+            selected_object: None
         }
     }
 

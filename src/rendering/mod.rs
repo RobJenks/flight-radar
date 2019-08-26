@@ -45,7 +45,7 @@ fn render_aircraft(aircraft: &Aircraft, buffer: &mut BackBuffer, view_size: &[u3
     if let (Some(lon), Some(lat)) = (aircraft.longitude, aircraft.latitude) {
         let (x_norm_scaled, y_norm_scaled) = coords::lon_lat_to_map(lon, lat, view_origin, zoom_level);
 
-        if x_norm_scaled >= 0.0 && y_norm_scaled >= 0.0 && x_norm_scaled < 1.0 && y_norm_scaled < 1.0 {
+        if coords::in_bounds((x_norm_scaled, y_norm_scaled)) {
             let (x, y) = ((x_norm_scaled * view_size[0] as f64) as u32, (y_norm_scaled * view_size[1] as f64) as u32);
 
             buffer.put_pixel(x, y, colour::GREEN);
