@@ -10,9 +10,10 @@ use crate::sources;
 use crate::simulation;
 use crate::rendering;
 use crate::data::geography;
-use crate::data::aircraft::AircraftData;
+use crate::data::aircraft::{AircraftData, Aircraft};
 use crate::rendering::BackBuffer;
 use std::cell::{RefCell, Ref, RefMut};
+use crate::geo::coords::{lon_lat_to_map, window_to_map};
 
 const MOUSE_LEFT: usize = 0;
 const MOUSE_RIGHT: usize = 1;
@@ -20,6 +21,8 @@ const MOUSE_BUTTON_COUNT: usize = 2;
 
 const SCROLL_SCALING_FACTOR: f64 = 0.1;
 const PAN_SCALING_FACTOR: f64 = 1.5;
+
+const MAX_OBJECT_SELECT_DISTANCE_SQ: f64 = 2.0 * 2.0;
 
 
 pub struct FlightRadar {
@@ -31,7 +34,7 @@ pub struct FlightRadar {
 
     draw_size: [u32; 2],
     draw_sizef: [f64; 2],
-    window_size: Size,
+    window_size: [f64; 2],
     canvas: BackBuffer,
 
     zoom_level: f64,
@@ -160,19 +163,34 @@ impl FlightRadar {
 
     fn mouse_up(&mut self, button: &MouseButton) {
         if let Some(ix) = FlightRadar::mouse_button_index(button) {
-            match ix {
-                MOUSE_LEFT => {         // Post-selection drag
-                    let rect = self.get_drag_selection(MOUSE_LEFT, &self.window_size).unwrap_or_else(|| panic!("No drag data"));
-                    self.zoom_to(&rect);
-                    self.update_backbuffer();
-                }
-                MOUSE_RIGHT => {        // Post-drag
-                    self.update_backbuffer()
-                },
-                _ => ()
+            if self.is_mouse_dragging(ix) {
+                self.mouse_drag_up(ix)
+            } else {
+                self.mouse_click(ix, &self.mouse_down_point[ix].unwrap_or_else(|| panic!("No mouse down location")));
             }
 
             self.mouse_down_point[ix] = None;
+        }
+    }
+
+    fn mouse_click(&mut self, button_index: usize, location: &[f64; 2]) {
+        match button_index {
+            MOUSE_LEFT => self.map_click(location),
+            _ => ()
+        }
+    }
+
+    fn mouse_drag_up(&mut self, button_index: usize) {
+        match button_index {
+            MOUSE_LEFT => {         // Post-selection drag
+                let rect = self.get_drag_selection(MOUSE_LEFT, &self.window_size).unwrap_or_else(|| panic!("No drag data"));
+                self.zoom_to(&rect);
+                self.update_backbuffer();
+            }
+            MOUSE_RIGHT => {        // Post-drag
+                self.update_backbuffer();
+            },
+            _ => ()
         }
     }
 
@@ -201,9 +219,9 @@ impl FlightRadar {
             .unwrap_or(false)
     }
 
-    fn get_drag_selection(&self, button: usize, window_size: &Size) -> Option<[f64; 4]> {
+    fn get_drag_selection(&self, button: usize, window_size: &[f64; 2]) -> Option<[f64; 4]> {
         if self.is_mouse_dragging(button) {
-            let (nx, ny) = (|x| x / window_size.width, |y| y / window_size.height);
+            let (nx, ny) = (|x| x / window_size[0], |y| y / window_size[1]);
 
             let start = self.mouse_down_point[button].unwrap_or_else(|| panic!("No mouse down start location"));
             Some([nx(start[0]), ny(start[1]), nx(self.cursor_pos[0] - start[0]), ny(self.cursor_pos[1] - start[1])])
@@ -226,10 +244,36 @@ impl FlightRadar {
         self.window.borrow_mut()
     }
 
+    fn map_click(&mut self, location: &[f64; 2]) {
+        let loc = window_to_map(location[0], location[1], &self.window_size, &self.view_origin, self.zoom_level);
+
+        // Get the closest object to this click location
+        let (origin, zoom) = (self.view_origin, self.zoom_level);
+        let (index, distsq) = self.data.data
+            .iter()
+            .enumerate()
+            .filter(|(i, x)| x.longitude.is_some() && x.latitude.is_some())
+            .map(|(i, x)| (i, lon_lat_to_map(x.longitude.unwrap(), x.latitude.unwrap(), &origin, zoom)))
+            .map(|(i, pos)| (i, ((pos.0 - loc.0).abs(), (pos.1 - loc.1).abs())))
+            .map(|(i, dxy)| (i, dxy.0 * dxy.0 + dxy.1 * dxy.1))  // Squared distance to point
+            .fold((0, 1e6f64), |(ix, d2min), (i, d2)| if d2 < d2min {(i, d2)} else {(ix, d2min)});
+
+        if distsq <= MAX_OBJECT_SELECT_DISTANCE_SQ {
+            self.select_object(index);
+        }
+    }
+
+    fn select_object(&mut self, index: usize) {
+        let obj = &self.data.data[index];
+        let (x, y) = lon_lat_to_map(obj.longitude.unwrap(), obj.latitude.unwrap(), &self.view_origin, self.zoom_level);
+
+        println!("Object: {:?} at {},{}", obj, x, y);
+    }
+
     fn update_size(&mut self, size: &[u32; 2], window_size: Size) {
         self.draw_size = *size;
         self.draw_sizef = [self.draw_size[0] as f64, self.draw_size[1] as f64];
-        self.window_size = window_size;
+        self.window_size = [window_size.width, window_size.height];
 
         self.canvas = image::ImageBuffer::new(self.draw_size[0], self.draw_size[1]);
     }
@@ -258,7 +302,7 @@ impl FlightRadar {
         // Determine pan required to maintain consistent zoom target
         let size = self.window_size;
         let scale_change = (1.0 / self.zoom_level - 1.0 / original_zoom_level);
-        let zoom_point = [self.cursor_pos[0] / size.width, self.cursor_pos[1] / size.height];
+        let zoom_point = [self.cursor_pos[0] / size[0], self.cursor_pos[1] / size[1]];
 
         let offset = (-(zoom_point[0] * scale_change), -(zoom_point[1] * scale_change));
         self.view_origin[0] += offset.0;
@@ -301,7 +345,7 @@ impl FlightRadar {
 
         let draw_size: [u32; 2] = [window.draw_size().width as u32, window.draw_size().height as u32];
         let draw_sizef: [f64; 2] = [draw_size[0] as f64, draw_size[1] as f64];
-        let window_size = window.draw_size();
+        let window_size = [window.size().width, window.size().height];
         let canvas: BackBuffer = image::ImageBuffer::new(draw_size[0], draw_size[1]);
 
 

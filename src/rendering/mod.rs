@@ -43,11 +43,7 @@ fn clear_backbuffer(canvas: &mut BackBuffer) {
 
 fn render_aircraft(aircraft: &Aircraft, buffer: &mut BackBuffer, view_size: &[u32; 2], zoom_level: f64, view_origin: &[f64; 2]) -> bool {
     if let (Some(lon), Some(lat)) = (aircraft.longitude, aircraft.latitude) {
-        let (x_norm, y_norm) = coords::normalised_equirectangular_coords(lon, lat);
-        let (x_norm_scaled, y_norm_scaled) = (
-            (x_norm - view_origin[0]) * zoom_level,
-            (y_norm - view_origin[1]) * zoom_level
-        );
+        let (x_norm_scaled, y_norm_scaled) = coords::lon_lat_to_map(lon, lat, view_origin, zoom_level);
 
         if x_norm_scaled >= 0.0 && y_norm_scaled >= 0.0 && x_norm_scaled < 1.0 && y_norm_scaled < 1.0 {
             let (x, y) = ((x_norm_scaled * view_size[0] as f64) as u32, (y_norm_scaled * view_size[1] as f64) as u32);

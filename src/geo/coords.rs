@@ -33,3 +33,22 @@ pub fn normalised_equirectangular_coords(lon: f64, lat: f64) -> (f64, f64) {
 pub fn transform_normalised_to_screen(coord: (f64, f64)) -> (f64, f64) {
     (coord.0, 1.0 - coord.1)
 }
+
+pub fn window_to_map(x: f64, y: f64, window_size: &[f64; 2], view_origin: &[f64; 2], zoom_level: f64) -> (f64, f64) {
+    screen_coords_to_map((x / window_size[0], y / window_size[1]), view_origin, zoom_level)
+}
+
+pub fn lon_lat_to_map(lon: f64, lat: f64, view_origin: &[f64; 2], zoom_level: f64) -> (f64, f64) {
+
+    screen_coords_to_map(
+        normalised_equirectangular_coords(lon, lat),
+        view_origin, zoom_level)
+}
+
+fn screen_coords_to_map(coord: (f64, f64), view_origin: &[f64; 2], zoom_level: f64) -> (f64, f64) {
+    (
+        (coord.0 - view_origin[0]) * zoom_level,
+        (coord.1 - view_origin[1]) * zoom_level
+    )
+}
+
