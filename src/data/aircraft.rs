@@ -1,5 +1,8 @@
 use serde::*;
 use serde_tuple::*;
+//use std::time::{SystemTime, Instant, UNIX_EPOCH, Duration};
+use std::time::SystemTime;
+use crate::util::temporal;
 
 #[derive(Clone, Debug, Serialize, Deserialize_tuple)]
 pub struct Aircraft {
@@ -40,4 +43,20 @@ impl Aircraft {
     pub fn _has_position_data(&self) -> bool {
         self.longitude.is_some() && self.latitude.is_some()
     }
+
+    pub fn basic_status(&self) -> String {
+        //"AAA1234 (United States, ICAO: ab42de, Last contact: 2 seconds ago)"
+        let last_contact = temporal::get_duration(
+            temporal::systemtime_from_datetime(
+                temporal::utc_datetime_from_timestamp(self.last_contact as i64)),
+            SystemTime::now());
+
+        format!("{} ({}, ICAO: {}, Last contact: {}",
+            self.callsign.as_ref().unwrap_or(&"[Unknown callsign]".to_string()),
+            self.origin_country,
+            self.icao24,
+            last_contact.map(|x| format!("{} seconds ago", x.as_secs())).unwrap_or("[Unknown]".to_string())
+        )
+    }
+
 }

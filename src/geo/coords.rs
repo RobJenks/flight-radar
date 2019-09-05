@@ -38,8 +38,21 @@ pub fn normalise_to_window(x: f64, y: f64, draw_size: &[f64; 2]) -> (f64, f64) {
     (x / draw_size[0], y / draw_size[1])
 }
 
+pub fn normalise_coord(c: f64, window_size_in_c: f64) -> f64 {
+    c / window_size_in_c
+}
+
+pub fn normalised_coords(coords: &[f64; 2], window_size: &[f64; 2]) -> (f64, f64) {
+    (
+        normalise_coord(coords[0], window_size[0]),
+        normalise_coord(coords[1], window_size[1])
+    )
+}
+
 pub fn window_to_map(x: f64, y: f64, window_size: &[f64; 2], view_origin: &[f64; 2], zoom_level: f64) -> (f64, f64) {
-    screen_coords_to_map((x / window_size[0], y / window_size[1]), view_origin, zoom_level)
+    screen_coords_to_map((
+        normalise_coord(x, window_size[0]),
+        normalise_coord(y, window_size[1])), view_origin, zoom_level)
 }
 
 pub fn lon_lat_to_map(lon: f64, lat: f64, view_origin: &[f64; 2], zoom_level: f64) -> (f64, f64) {

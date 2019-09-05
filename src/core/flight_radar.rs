@@ -14,8 +14,8 @@ use crate::data::aircraft::{Aircraft, AircraftData};
 use crate::rendering::BackBuffer;
 use crate::text;
 use std::cell::{RefCell, Ref, RefMut};
-use crate::geo::coords::{lon_lat_to_map, window_to_map, in_bounds, normalise_to_window};
-use crate::rendering::colour::COLOUR_SELECTED_OBJECT;
+use crate::geo::coords::{lon_lat_to_map, normalise_to_window, normalised_coords};
+use crate::rendering::colour::{COLOUR_SELECTED_OBJECT, COLOUR_STATUS_AREA_BACK, COLOUR_STATUS_AREA_OUTLINE, COLOUR_STATUS_AREA_TEXT};
 
 const MOUSE_LEFT: usize = 0;
 const MOUSE_RIGHT: usize = 1;
@@ -26,6 +26,7 @@ const PAN_SCALING_FACTOR: f64 = 1.5;
 
 const MAX_OBJECT_SELECT_DISTANCE_SQ: f64 = 2.0 * 2.0;
 const SELECTION_CIRCLE_RADIUS: f64 = 5.0;
+const STATUS_AREA_SIZE: f64 = 0.1;
 
 pub struct FlightRadar {
     window: RefCell<PistonWindow>,
@@ -138,7 +139,7 @@ impl FlightRadar {
                             }
 
                             self.render_selected_object_data(glyph_cache, &context, g);
-                            self.render_text("This is a test message", &[0.2,0.3], [1.0,0.0,0.0,1.0], 48, glyph_cache, &context, g);
+                            //self.render_text("This is a test message", &[0.2,0.3], [1.0,0.0,0.0,1.0], 48, glyph_cache, &context, g);
 
                             glyph_cache.factory.encoder.flush(device);
                         });
@@ -258,7 +259,7 @@ impl FlightRadar {
     }
 
     fn map_click(&mut self, location: &[f64; 2]) {
-        let loc = window_to_map(location[0], location[1], &self.window_size, &self.view_origin, self.zoom_level);
+        let loc = normalised_coords(location, &self.window_size);
 
         // Get the closest object to this click location
         let (origin, zoom) = (self.view_origin, self.zoom_level);
@@ -292,11 +293,22 @@ impl FlightRadar {
                     (x + adj.0, y + adj.1)
                 );
 
+                // Selection highlight around object
                 ellipse_from_to(COLOUR_SELECTED_OBJECT,
                                 [select_min.0, select_min.1],
                                 [select_max.0, select_max.1], context.transform, g);
 
-                //rectangle([1.0; 4], [x+0.01, y+0.01, 0.3, 0.15], context.transform, g);
+                // Status area
+                rectangle(COLOUR_STATUS_AREA_BACK, [0.0, 1.0 - STATUS_AREA_SIZE, 1.0, STATUS_AREA_SIZE], context.transform, g);
+                line_from_to(COLOUR_STATUS_AREA_OUTLINE, 0.001, [0.0, 1.0 - STATUS_AREA_SIZE], [1.0, 1.0 - STATUS_AREA_SIZE], context.transform, g);
+
+                // Object information
+                // {"time":1566137050,"states":[["ac96b8","AAL137  ","United States",1566136785,1566136790,-97.0546,32.9235,228.6,false,72.02,180,-4.88,null,213.36,"0755",false,0]
+                self.render_text_lines(vec![
+                    obj.basic_status().as_str()
+                ],
+                &[0.01, 1.0 - STATUS_AREA_SIZE + 0.02], 16.0, COLOUR_STATUS_AREA_TEXT, 14, glyph_cache, context, g
+                );
             }
         }
     }
@@ -311,6 +323,14 @@ impl FlightRadar {
                 .trans(pos[0] * self.draw_sizef[0], pos[1] * self.draw_sizef[1]),
             g)
             .unwrap_or_else(|e| panic!("Text rendering failed ({:?})", e));
+    }
+
+    fn render_text_lines(&self, text: Vec<&str>, pos: &[f64; 2], line_spacing: f64, colour: [f32; 4],
+                         font_size: u32, glyph_cache: &mut Glyphs, context: &Context, g: &mut G2d) {
+        text.iter()
+            .enumerate()
+            .for_each(|(i, &line)| self.render_text(line, &[pos[0], pos[1] + line_spacing * i as f64],
+                                                    colour, font_size, glyph_cache, context, g));
     }
 
     fn update_size(&mut self, size: &[u32; 2], window_size: Size) {
