@@ -157,15 +157,16 @@ impl FlightRadar {
         }
     }
 
-    fn key_down(&mut self, key: &Key) {
+    fn key_down(&mut self, _key: &Key) { }
+
+    fn key_up(&mut self, key: &Key) {
         match key {
+            Key::Home => self.reset_view(),
             Key::F12 => rendering::screenshot::display_screenshot(),
 
             _ => ()
         }
     }
-
-    fn key_up(&mut self, _key: &Key) { }
 
     fn mouse_down(&mut self, button: &MouseButton) {
         if let Some(ix) = FlightRadar::mouse_button_index(button) {
@@ -256,6 +257,11 @@ impl FlightRadar {
 
     fn window_mut(&self) -> RefMut<PistonWindow> {
         self.window.borrow_mut()
+    }
+
+    fn reset_view(&mut self) {
+        self.view_origin = [0.0, 0.0];
+        self.zoom_level = 1.0;
     }
 
     fn map_click(&mut self, location: &[f64; 2]) {
