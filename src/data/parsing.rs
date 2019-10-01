@@ -1,7 +1,6 @@
 use core::str::Chars;
 
 const SIMPLE_MULTI_LINE_STRING_PREFIX: &str = "MULTILINESTRING ((";
-//1,MULTILINESTRING ((-163.7128956777287 -78.59566741324154, -163.1058009511638 -78.22333871857859, ...)),1,Coastline,1.0
 
 pub struct GeoShpIter<'a> {
     input: &'a String,
