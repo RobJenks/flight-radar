@@ -59,12 +59,13 @@ fn render_coastline(data: &CoastlineDataEntry, g: &mut piston_window::G2d, conte
                     _render_size: (f64, f64), zoom_level: f64, view_origin: &[f64; 2]) -> usize {
     let transformed = data.vertices.iter()
         .map(|v| coords::normalised_equirectangular_coords(v[0], v[1]))
-        //.map(|v| [v.0 * zoom_level - (view_origin[0] - 0.0), v.1 * zoom_level - (view_origin[1] - 0.0)])
         .map(|v| [(v.0 - view_origin[0]) * zoom_level, (v.1 - view_origin[1]) * zoom_level])
         .collect::<Vec<[f64; 2]>>();
 
-    (0..(transformed.len() - 1))
-        .map(|ix| coastline_segment(g, context, transformed[ix], transformed[ix + 1]))
+    transformed.iter()
+        .enumerate()
+        .skip(1)
+        .map(|(i, &x)| coastline_segment(g, context, transformed[i - 1], x))
         .filter(|x| *x)
         .count()
 }
