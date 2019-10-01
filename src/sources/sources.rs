@@ -5,6 +5,7 @@ pub struct SourceProvider {
     use_cache: bool
 }
 
+#[derive(Debug)]
 pub struct Source {
     path: String,
     cred: Option<String>,
@@ -20,14 +21,16 @@ impl SourceProvider {
     pub fn is_authenticated(&self) -> bool { return self.cred.is_some() }
 
     fn source(&self, path: String) -> Source {
-        Source::new(format!("https://{}opensky-network.org/api{}",
-                            CRED_TOKEN,
-                            path),
+        Source::new(format!("https://{}opensky-network.org/api{}", CRED_TOKEN, path),
                     self.cred.clone(), self.use_cache)
     }
 
     pub fn source_state_vectors(&self) -> Source {
         self.source("/states/all".to_string())
+    }
+
+    pub fn source_flight_data(&self, icao24: &String, start: i64, end: i64) -> Source {
+        self.source(format!("/flights/aircraft?icao24={}&begin={}&end={}", icao24, start, end))
     }
 }
 

@@ -9,8 +9,8 @@ pub struct Aircraft {
     pub icao24: String,
     pub callsign: Option<String>,           // Can be null if not received
     pub origin_country: String,
-    pub time_position: Option<isize>,       // Time of last position update, as unix timestamp.  Can be null
-    pub last_contact: isize,                // Time of last update received, as unix timestamp
+    pub time_position: Option<i64>,         // Time of last position update, as unix timestamp.  Can be null
+    pub last_contact: i64,                  // Time of last update received, as unix timestamp
     pub longitude: Option<f64>,             // Can be null if not received
     pub latitude: Option<f64>,              // Can be null if not received
     pub baro_altitude: Option<f32>,         // Barometric altitude, meters.  Can be null
@@ -51,7 +51,7 @@ impl Aircraft {
                 temporal::utc_datetime_from_timestamp(self.last_contact as i64)),
             SystemTime::now());
 
-        format!("{} ({}, ICAO: {}, Last contact: {}",
+        format!("{} ({}, ICAO: {}, Last contact: {})",
             self.callsign.as_ref().unwrap_or(&"[Unknown callsign]".to_string()),
             self.origin_country,
             self.icao24,
