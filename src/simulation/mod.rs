@@ -1,9 +1,8 @@
-use std::sync::mpsc::{Sender, Receiver, RecvError, SendError};
+use std::sync::mpsc::{Sender, Receiver, SendError};
 use std::thread;
 use std::time::Duration;
 use std::error::Error;
 
-use crate::util::functional::TransformingAndThen;
 use crate::data::aircraft::AircraftData;
 use crate::data::flight::FlightData;
 use crate::sources::{sources, httpclient, caching};
@@ -63,15 +62,15 @@ pub fn periodic_trigger(trigger: Sender<sources::Source>, request: sources::Sour
 pub fn retrieve_flight_data(request: Receiver<(String, sources::Source)>, out: Sender<FlightData>) {
     loop {
         request.recv()
-            .and_then(|(icao24, source)| {
-                println!("Retrieving flight data for \"{}\"...", icao24);
-                perform_flight_data_lookup(source)
-                    .map(|x| out.send(x).unwrap_or_else(|e| {
-                        println!("Failed to return flight data for \"{}\" to simulation ({})", icao24, e.to_string())
-                    }))
-                    .and_then(|x| Some(println!("Retrieved flight data successfully")));
-
-                Ok(())
+            .map_or_else(
+                |e| println!("Failed to receive flight data ({:?})", e),
+                |(icao24, source)| {
+                    println!("Retrieving flight data for \"{}\"...", icao24);
+                    perform_flight_data_lookup(source)
+                        .map(|x| out.send(x).unwrap_or_else(|e| {
+                            println!("Failed to return flight data for \"{}\" to simulation ({})", icao24, e.to_string())
+                        }))
+                        .and_then(|_| Some(println!("Retrieved flight data successfully")));
             });
     }
 }

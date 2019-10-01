@@ -11,7 +11,7 @@ use crate::simulation;
 use crate::rendering;
 use crate::data::geography;
 use crate::data::aircraft::{Aircraft, AircraftData};
-use crate::data::flight::{Flight, FlightData};
+use crate::data::flight::FlightData;
 use crate::rendering::BackBuffer;
 use crate::text;
 use std::cell::{RefCell, Ref, RefMut};
@@ -319,7 +319,7 @@ impl FlightRadar {
                     timestamp - (2 * 24 * 60 * 60),   // -5d
                     timestamp
                 )
-            ));
+            )).unwrap_or_else(|e| println!("Failed to issue flight details request ({:?})", e));
         }
     }
 
@@ -391,11 +391,13 @@ impl FlightRadar {
     fn receive_flight_data(&mut self) {
         if self.rx_flight_data_resp.is_some() {
             let rcv = self.rx_flight_data_resp.as_ref().unwrap().try_recv();
-            rcv.and_then(|x| {
-                println!("Received {} flight data entries: {:?}", x.len(), x);
-                self.flight_data = x;
-                Ok(())
-            });
+            match rcv {
+                Ok(x) => {
+                    println!("Received {} flight data entries: {:?}", x.len(), x);
+                    self.flight_data = x;
+                }
+                _ => ()     // Allowed, this is a non-blocking try-read
+            }
         }
     }
 

@@ -18,6 +18,6 @@ pub fn get_current_timestamp_secs() -> i64{
     Utc::now().timestamp()
 }
 
-pub fn get_current_timestamp_ms() -> i64{
+pub fn _get_current_timestamp_ms() -> i64{
     Utc::now().timestamp_millis()
 }
