@@ -13,3 +13,11 @@ pub fn systemtime_from_datetime<Tz: TimeZone>(datetime: DateTime<Tz>) -> SystemT
 pub fn get_duration(start: SystemTime, end: SystemTime) -> Result<Duration, SystemTimeError> {
     end.duration_since(start)
 }
+
+pub fn get_current_timestamp_secs() -> i64{
+    Utc::now().timestamp()
+}
+
+pub fn get_current_timestamp_ms() -> i64{
+    Utc::now().timestamp_millis()
+}

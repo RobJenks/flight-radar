@@ -1,10 +1,18 @@
-use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc::{Sender, Receiver, RecvError, SendError};
 use std::thread;
 use std::time::Duration;
 use std::error::Error;
 
+use crate::util::functional::TransformingAndThen;
 use crate::data::aircraft::AircraftData;
+use crate::data::flight::FlightData;
 use crate::sources::{sources, httpclient, caching};
+
+pub enum RetrievalError {
+    HttpRequestError(reqwest::Error),
+    JsonParsingError(serde_json::error::Error),
+    FlightChannelSendError(SendError<FlightData>)
+}
 
 
 pub fn simulate(trigger: Receiver<sources::Source>, out: Sender<AircraftData>) {
@@ -52,7 +60,64 @@ pub fn periodic_trigger(trigger: Sender<sources::Source>, request: sources::Sour
     };
 }
 
+pub fn retrieve_flight_data(request: Receiver<(String, sources::Source)>, out: Sender<FlightData>) {
+    loop {
+        request.recv()
+            .and_then(|(icao24, source)| {
+                println!("Retrieving flight data for \"{}\"...", icao24);
+                perform_flight_data_lookup(source)
+                    .map(|x| out.send(x).unwrap_or_else(|e| {
+                        println!("Failed to return flight data for \"{}\" to simulation ({})", icao24, e.to_string())
+                    }))
+                    .and_then(|x| Some(println!("Retrieved flight data successfully")));
+
+                Ok(())
+            });
+    }
+}
+
+fn perform_flight_data_lookup(source: sources::Source) -> Option<FlightData> {
+    let data = httpclient::get(source.get_path().as_str());
+    println!("SOURCE: {:?}, RESULT: {:?}", source, data);
+    data.map_or_else(|_| None, |x| serde_json::from_str::<FlightData>(x.as_str())
+        .map_or_else(|_| None, |x| Some(x)))
+}
+
+
 fn parse_data(data: String) -> AircraftData {
     serde_json::from_str(data.as_str())
         .unwrap_or_else(|e| panic!("Failed to deserialise response: {:?}", e))
 }
+
+
+
+impl From<reqwest::Error> for RetrievalError {
+    fn from(error: reqwest::Error) -> RetrievalError {
+        RetrievalError::HttpRequestError(error)
+    }
+}
+impl From<serde_json::error::Error> for RetrievalError {
+    fn from(error: serde_json::error::Error) -> RetrievalError {
+        RetrievalError::JsonParsingError(error)
+    }
+}
+impl From<SendError<FlightData>> for RetrievalError {
+    fn from(error: SendError<FlightData>) -> RetrievalError {
+        RetrievalError::FlightChannelSendError(error)
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

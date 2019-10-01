@@ -6,6 +6,7 @@ edition = "2018"
 
 
 [dependencies]
+failure = "0.1.5"
 reqwest = "0.9.19"
 chrono = "0.4.7"
 

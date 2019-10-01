@@ -1,7 +1,7 @@
 extern crate piston_window;
 use std::thread;
 use std::sync::mpsc;
-use std::sync::mpsc::{Sender};
+use std::sync::mpsc::{Sender, Receiver};
 use ::image;
 use piston_window::*;
 use sources::sources::{Source, SourceProvider};
@@ -11,11 +11,13 @@ use crate::simulation;
 use crate::rendering;
 use crate::data::geography;
 use crate::data::aircraft::{Aircraft, AircraftData};
+use crate::data::flight::{Flight, FlightData};
 use crate::rendering::BackBuffer;
 use crate::text;
 use std::cell::{RefCell, Ref, RefMut};
 use crate::geo::coords::{lon_lat_to_map, normalise_to_window, normalised_coords};
 use crate::rendering::colour::{COLOUR_SELECTED_OBJECT, COLOUR_STATUS_AREA_BACK, COLOUR_STATUS_AREA_OUTLINE, COLOUR_STATUS_AREA_TEXT};
+use crate::util::temporal::get_current_timestamp_secs;
 
 const MOUSE_LEFT: usize = 0;
 const MOUSE_RIGHT: usize = 1;
@@ -34,6 +36,7 @@ pub struct FlightRadar {
     text_manager: RefCell<text::TextManager>,
 
     data: AircraftData,
+    flight_data: FlightData,
     geo_data: geography::GeoData,
 
     draw_size: [u32; 2],
@@ -46,13 +49,16 @@ pub struct FlightRadar {
     cursor_pos: [f64; 2],
 
     mouse_down_point: [Option<[f64; 2]>; MOUSE_BUTTON_COUNT],
-    selected_object: Option<Aircraft>
+    selected_object: Option<Aircraft>,
+
+    tx_flight_data_req: Option<Sender<(String, Source)>>,       // (Request channel for new flight data)
+    rx_flight_data_resp: Option<Receiver<FlightData>>,          // (Response channel with new flight data)
 }
 
 impl FlightRadar {
     pub fn execute(&mut self) {
-        // Channel (Event loop -> trigger simulation)
-        let (tx_data, rx_data) = mpsc::channel();   // Channel (Simulation -> Event loop)
+        // Inter-thread channels
+        let (tx_data, rx_data) = mpsc::channel();   // (Simulation -> Event loop)
         let (tx_simulate, rx_simulate) = mpsc::channel();   // (Event loop -> trigger simulation)
         let tx_periodic_simulation = tx_simulate.clone();
 
@@ -60,6 +66,14 @@ impl FlightRadar {
         let periodic_source = self.source_provider.source_state_vectors();
         thread::spawn(move || simulation::simulate(rx_simulate, tx_data));
         thread::spawn(move || simulation::periodic_trigger(tx_periodic_simulation, periodic_source, 2));
+
+        // Async requests for flight data
+        let (tx_flight_data_req, rx_flight_data_req) = mpsc::channel();     // (Request for flight data)
+        let (tx_flight_data_resp, rx_flight_data_resp) = mpsc::channel();   // (Response with new flight data)
+
+        self.tx_flight_data_req = Some(tx_flight_data_req);
+        self.rx_flight_data_resp = Some(rx_flight_data_resp);
+        thread::spawn(move || simulation::retrieve_flight_data(rx_flight_data_req, tx_flight_data_resp));
 
         let factory: GfxFactory = self.window().factory.clone();
         let mut texture_context = TextureContext { factory, encoder: self.window_mut().factory.create_command_buffer().into() };
@@ -149,6 +163,8 @@ impl FlightRadar {
                             self.data = d;
                             self.update_backbuffer();
                         }
+
+                        self.receive_flight_data()
                     },
                     _ => ()
                 },
@@ -284,8 +300,27 @@ impl FlightRadar {
     }
 
     fn select_object(&mut self, index: Option<usize>) {
+        // Select the new object
         self.selected_object = index
             .map(|i| self.data.data[i].clone());
+
+        // Issue a request for detailed flight data
+        let icao24 = self.selected_object.as_ref()
+            .map(|x| x.icao24.clone())
+            .unwrap_or("[None]".to_string());
+        let timestamp = get_current_timestamp_secs();
+
+        if self.tx_flight_data_req.is_some() {
+            println!("Issuing request for \"{}\" flight details", icao24);
+            self.tx_flight_data_req.as_ref().unwrap().send((
+                icao24.clone(),
+                self.source_provider.source_flight_data(
+                    &icao24,
+                    timestamp - (2 * 24 * 60 * 60),   // -5d
+                    timestamp
+                )
+            ));
+        }
     }
 
     fn render_selected_object_data(&self, glyph_cache: &mut Glyphs, context: &Context, g: &mut G2d) {
@@ -353,6 +388,17 @@ impl FlightRadar {
           .expect("Failed to trigger simulation cycle");
     }
 
+    fn receive_flight_data(&mut self) {
+        if self.rx_flight_data_resp.is_some() {
+            let rcv = self.rx_flight_data_resp.as_ref().unwrap().try_recv();
+            rcv.and_then(|x| {
+                println!("Received {} flight data entries: {:?}", x.len(), x);
+                self.flight_data = x;
+                Ok(())
+            });
+        }
+    }
+
     fn update_backbuffer(&mut self) {
         rendering::prepare_backbuffer(&mut self.canvas, &self.draw_size, self.zoom_level, self.view_origin, &self.data);
     }
@@ -418,13 +464,13 @@ impl FlightRadar {
         let window_size = [window.size().width, window.size().height];
         let canvas: BackBuffer = image::ImageBuffer::new(draw_size[0], draw_size[1]);
 
-
         Self {
             window: RefCell::new(window),
             source_provider,
             text_manager: RefCell::new(text_manager),
 
             data,
+            flight_data: FlightData::new(),
             geo_data,
 
             draw_size,
@@ -437,7 +483,10 @@ impl FlightRadar {
             cursor_pos: [0.0, 0.0],
 
             mouse_down_point: [None; MOUSE_BUTTON_COUNT],
-            selected_object: None
+            selected_object: None,
+
+            tx_flight_data_req: None,
+            rx_flight_data_resp: None
         }
     }
 
