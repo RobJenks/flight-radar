@@ -1,6 +1,5 @@
 use serde::*;
 use serde_tuple::*;
-//use std::time::{SystemTime, Instant, UNIX_EPOCH, Duration};
 use std::time::SystemTime;
 use crate::util::temporal;
 
@@ -37,6 +36,13 @@ impl AircraftData {
     pub fn empty() -> Self {
         Self { time: 0, data: vec![] }
     }
+
+    pub fn linear_search<P>(&self, pred: P) -> Option<&Aircraft>
+        where P: FnMut(&&Aircraft) -> bool {
+        self.data.iter()
+            .filter(pred)
+            .next()
+    }
 }
 
 impl Aircraft {
@@ -45,7 +51,7 @@ impl Aircraft {
     }
 
     pub fn basic_status(&self) -> String {
-        //"AAA1234 (United States, ICAO: ab42de, Last contact: 2 seconds ago)"
+        // e.g. "AAA1234 (United States, ICAO: ab42de, Last contact: 2 seconds ago)"
         let last_contact = temporal::get_duration(
             temporal::systemtime_from_datetime(
                 temporal::utc_datetime_from_timestamp(self.last_contact as i64)),

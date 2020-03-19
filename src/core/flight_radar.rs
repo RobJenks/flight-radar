@@ -79,7 +79,6 @@ impl FlightRadar {
         let mut texture_context = TextureContext { factory, encoder: self.window_mut().factory.create_command_buffer().into() };
         let mut texture: G2dTexture = Texture::from_image(&mut texture_context,&self.canvas, &TextureSettings::new()).unwrap();
 
-        //while let Some(e) = self.window_mut().next() {
         loop {
             let e_next = self.window_mut().next();
             if e_next == None { break; }
@@ -153,7 +152,6 @@ impl FlightRadar {
                             }
 
                             self.render_selected_object_data(glyph_cache, &context, g);
-                            //self.render_text("This is a test message", &[0.2,0.3], [1.0,0.0,0.0,1.0], 48, glyph_cache, &context, g);
 
                             glyph_cache.factory.encoder.flush(device);
                         });
@@ -164,7 +162,8 @@ impl FlightRadar {
                             self.update_backbuffer();
                         }
 
-                        self.receive_flight_data()
+                        self.receive_flight_data();
+                        self.update_selection()
                     },
                     _ => ()
                 },
@@ -398,6 +397,17 @@ impl FlightRadar {
                 }
                 _ => ()     // Allowed, this is a non-blocking try-read
             }
+        }
+    }
+
+    fn update_selection(&mut self) {
+        if self.selected_object.is_some() {
+            let new = self.selected_object.as_ref()
+                .and_then(|x| self.data
+                    .linear_search(|&y| x.icao24 == y.icao24)
+                    .map(|x| x.clone()));
+
+            self.selected_object = new;
         }
     }
 
