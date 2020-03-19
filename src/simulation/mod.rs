@@ -1,7 +1,6 @@
 use std::sync::mpsc::{Sender, Receiver, SendError};
 use std::thread;
 use std::time::Duration;
-use std::error::Error;
 
 use crate::data::aircraft::AircraftData;
 use crate::data::flight::FlightData;
@@ -26,21 +25,21 @@ pub fn simulate(trigger: Receiver<sources::Source>, out: Sender<AircraftData>) {
                     cache.get(&key)
                         .map(|data| Some(data))
                         .unwrap_or_else(|e| {
-                            eprintln!("Cannot retrieve \"{}\" from cache: {}", key, e.description());
+                            eprintln!("Cannot retrieve \"{}\" from cache: {}", key, e.to_string());
                             None
                         })
                 } else {
                     httpclient::get(source.get_path().as_str())
                         .map(|data| Some(data))
                         .unwrap_or_else(|e| {
-                            eprintln!("Remote retrieval error: {}", e.description());
+                            eprintln!("Remote retrieval error: {}", e.to_string());
                             None
                         })
                 };
 
                 if let Some(data) = data {
                     match out.send(parse_data(data)) {
-                        Err(e) => eprintln!("Send error: {}", e.description()),
+                        Err(e) => eprintln!("Send error: {}", e.to_string()),
                         _ => ()
                     }
                 }
