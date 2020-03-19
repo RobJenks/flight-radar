@@ -1,5 +1,3 @@
-#![feature(result_map_or_else)]
-
 mod core;
 mod data;
 mod geo;
