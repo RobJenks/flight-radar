@@ -383,8 +383,9 @@ impl FlightRadar {
 
     fn trigger_simulation(&self, tx: &Sender<Source>) {
         let source = self.source_provider.source_state_vectors();
-        tx.send(source)
-          .expect("Failed to trigger simulation cycle");
+        if let Some(err) = tx.send(source).err() {
+            eprintln!("Failed to trigger simulation cycle: {}", err.to_string());
+        }
     }
 
     fn receive_flight_data(&mut self) {
